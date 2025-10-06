@@ -68,15 +68,7 @@ export default function PricingPage() {
         />
       </section>
 
-      <figure className="mt-12">
-        <Image
-          src="/images/pricing-reference.png"
-          alt="Pricing reference design"
-          width={1210}
-          height={768}
-          className="mx-auto rounded-xl border"
-        />
-      </figure>
+     
     </main>
   )
 }
