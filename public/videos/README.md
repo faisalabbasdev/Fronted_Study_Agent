@@ -43,3 +43,4 @@ If no video is provided, the component will automatically fall back to the anima
 ## Current Implementation
 
 The homepage currently uses the LEDDemo component which provides a beautiful animated LED effect without requiring a video file.
+
