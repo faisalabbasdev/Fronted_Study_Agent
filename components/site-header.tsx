@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import ThemeToggle from "./theme-toggle"
 import { Button } from "@/components/ui/button"
@@ -29,6 +29,7 @@ const guestNav = [
 ]
 
 export default function SiteHeader() {
+  const router = useRouter()
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const { user, isAuthenticated, logout } = useAuth()
@@ -75,7 +76,7 @@ export default function SiteHeader() {
                              e.preventDefault()
                              // If we're not on the home page, navigate there first
                              if (pathname !== '/') {
-                               window.location.href = `/${item.href}`
+                               router.push(`/${item.href}`)
                              } else {
                                // If we're on the home page, scroll to the section
                                const element = document.querySelector(item.href)
@@ -109,8 +110,12 @@ export default function SiteHeader() {
                        <Link
                          key={item.href}
                          href={item.href}
+                         onClick={(e) => {
+                           e.preventDefault()
+                           router.push(item.href)
+                         }}
                          className={cn(
-                           "px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 relative group",
+                           "px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 relative group cursor-pointer",
                            active
                              ? "bg-primary text-primary-foreground shadow-sm"
                              : isDashboard
@@ -137,8 +142,12 @@ export default function SiteHeader() {
                          <Link
                            key={item.href}
                            href={item.href}
+                           onClick={(e) => {
+                             e.preventDefault()
+                             router.push(item.href)
+                           }}
                            className={cn(
-                             "px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200",
+                             "px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 cursor-pointer",
                              item.href === "/signup"
                                ? "bg-primary text-primary-foreground hover:bg-primary/90"
                                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -192,7 +201,7 @@ export default function SiteHeader() {
                                e.preventDefault()
                                // If we're not on the home page, navigate there first
                                if (pathname !== '/') {
-                                 window.location.href = `/${item.href}`
+                                 router.push(`/${item.href}`)
                                } else {
                                  // If we're on the home page, scroll to the section
                                  const element = document.querySelector(item.href)
@@ -227,9 +236,13 @@ export default function SiteHeader() {
                          <Link
                            key={item.href}
                            href={item.href}
-                           onClick={() => setIsMobileMenuOpen(false)}
+                           onClick={(e) => {
+                             e.preventDefault()
+                             router.push(item.href)
+                             setIsMobileMenuOpen(false)
+                           }}
                            className={cn(
-                             "block px-4 py-3 text-base font-medium rounded-lg transition-colors",
+                             "block px-4 py-3 text-base font-medium rounded-lg transition-colors cursor-pointer",
                              active
                                ? "bg-primary text-primary-foreground"
                                : isDashboard
@@ -260,9 +273,13 @@ export default function SiteHeader() {
                            <Link
                              key={item.href}
                              href={item.href}
-                             onClick={() => setIsMobileMenuOpen(false)}
+                             onClick={(e) => {
+                               e.preventDefault()
+                               router.push(item.href)
+                               setIsMobileMenuOpen(false)
+                             }}
                              className={cn(
-                               "block px-4 py-3 text-base font-medium rounded-lg transition-colors",
+                               "block px-4 py-3 text-base font-medium rounded-lg transition-colors cursor-pointer",
                                item.href === "/signup"
                                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
                                  : "text-foreground hover:text-foreground hover:bg-muted/60"

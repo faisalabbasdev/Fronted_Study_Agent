@@ -20,7 +20,6 @@ export function LEDDemo({
   ledColor = 'blue'
 }: LEDDemoProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [animationFrame, setAnimationFrame] = useState(0)
 
   const ledIntensityMap = {
     low: 0.3,
@@ -43,6 +42,8 @@ export function LEDDemo({
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+
+    let animationId: number
 
     const animate = () => {
       ctx.clearRect(0, 0, width, height)
@@ -152,17 +153,17 @@ export function LEDDemo({
         ctx.fillRect(x, y, size, size)
       }
       
-      setAnimationFrame(requestAnimationFrame(animate))
+      animationId = requestAnimationFrame(animate)
     }
     
     animate()
     
     return () => {
-      if (animationFrame) {
-        cancelAnimationFrame(animationFrame)
+      if (animationId) {
+        cancelAnimationFrame(animationId)
       }
     }
-  }, [width, height, ledIntensity, ledColor, animationFrame])
+  }, [width, height, ledIntensity, ledColor])
 
   return (
     <div className={cn("relative w-full h-80 rounded-2xl overflow-hidden", className)}>
