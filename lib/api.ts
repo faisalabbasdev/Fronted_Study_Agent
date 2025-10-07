@@ -3,7 +3,7 @@
  * Handles all API communication with proper error handling and token management
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cozy-comfort-production.up.railway.app/'
 
 export interface User {
   id: number
