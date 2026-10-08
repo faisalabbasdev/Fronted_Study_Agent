@@ -4,13 +4,19 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Eye, EyeOff, User, Mail, Lock, Chrome, Loader2, FileText } from "lucide-react"
+import { ArrowLeft, ArrowRight, BookOpen, Brain, Check, Eye, EyeOff, FileText, GraduationCap, Lock, Mail, Search, Share2, User, Users } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { StudyLoader } from "@/components/ui/study-loader"
 import { Progress } from "@/components/ui/progress"
 import Link from "next/link"
+import { apiClient } from "@/lib/api"
+import ThemeToggle from "@/components/theme-toggle"
+
+type OnboardingAnswers = { step: number; name: string; studyContext: string; university: string; program: string; semester: string; source: string }
+const onboardingKey = "tayyar-onboarding-draft"
+const initialOnboarding: OnboardingAnswers = { step: 1, name: "", studyContext: "University / college", university: "", program: "", semester: "", source: "" }
 
 export default function SignupPage() {
   const [show1, setShow1] = useState(false)
@@ -22,14 +28,25 @@ export default function SignupPage() {
     confirmPassword: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [onboardingFlow, setOnboardingFlow] = useState(false)
+  const [onboarding, setOnboarding] = useState<OnboardingAnswers>(initialOnboarding)
+  const [onboardingSaving, setOnboardingSaving] = useState(false)
+  const [onboardingError, setOnboardingError] = useState("")
   
-  const { signup, isAuthenticated, isLoading } = useAuth()
+  const { signup, isAuthenticated, isLoading, user, refreshUser } = useAuth()
   const router = useRouter()
 
   // Redirect if already authenticated
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.push("/dashboard")
+      const savedDraft = sessionStorage.getItem(onboardingKey)
+      if (savedDraft) {
+        try {
+          const parsed = JSON.parse(savedDraft) as OnboardingAnswers
+          setOnboarding(parsed)
+          setOnboardingFlow(true)
+        } catch { sessionStorage.removeItem(onboardingKey); router.replace("/dashboard") }
+      } else router.replace("/dashboard")
     }
   }, [isAuthenticated, isLoading, router])
 
@@ -79,18 +96,85 @@ export default function SignupPage() {
 
     try {
       setIsSubmitting(true)
+      sessionStorage.setItem(onboardingKey, JSON.stringify(initialOnboarding))
       await signup({
         full_name: formData.username, // Use username as full name
         email: formData.email,
         username: formData.username,
         password: formData.password,
       })
-      router.push("/dashboard")
+      setOnboarding(initialOnboarding)
+      setOnboardingFlow(true)
     } catch (error) {
+      sessionStorage.removeItem(onboardingKey)
       // Error is handled by the auth context
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const updateOnboarding = (patch: Partial<OnboardingAnswers>) => setOnboarding((current) => {
+    const next = { ...current, ...patch }
+    sessionStorage.setItem(onboardingKey, JSON.stringify(next))
+    return next
+  })
+
+  const finishOnboarding = async () => {
+    if (onboarding.name.trim().length < 2) { setOnboardingError("Please enter the name you’d like us to use."); return }
+    if (!onboarding.studyContext) { setOnboardingError("Choose the option that best describes your study plans."); return }
+    if (!onboarding.source) { setOnboardingError("Choose how you heard about Tayyar."); return }
+    setOnboardingSaving(true); setOnboardingError("")
+    try {
+      const preferences = {
+        ...(user?.preferences || {}),
+        onboarding: {
+          completed: true,
+          completed_at: new Date().toISOString(),
+          study_context: onboarding.studyContext,
+          university: onboarding.university.trim() || null,
+          program: onboarding.program.trim() || null,
+          semester: onboarding.semester.trim() || null,
+          discovery_source: onboarding.source,
+        },
+      }
+      await apiClient.updateCurrentUser({ full_name: onboarding.name.trim(), preferences })
+      await refreshUser()
+      sessionStorage.removeItem(onboardingKey)
+      router.replace("/dashboard")
+    } catch (error) {
+      setOnboardingError(error instanceof Error ? error.message : "We couldn’t save your study profile. Please try again.")
+    } finally { setOnboardingSaving(false) }
+  }
+
+  if (onboardingFlow) {
+    const options: Array<{ value: string; label: string; detail?: string; icon: typeof Search }> = onboarding.step === 2
+      ? [{ value: "University / college", label: "University or college", detail: "Coursework, lectures, and semester exams", icon: GraduationCap }, { value: "Entrance exams", label: "Entrance exam preparation", detail: "Prepare for an upcoming admission test", icon: BookOpen }, { value: "Independent study", label: "Independent learning", detail: "Build knowledge at your own pace", icon: Users }]
+      : [{ value: "Search engine", label: "Search engine", icon: Search }, { value: "Social media", label: "Social media", icon: Share2 }, { value: "Friend / classmate", label: "Friend or classmate", icon: Users }, { value: "Other", label: "Somewhere else", icon: BookOpen }]
+    return <main className="tayyar-onboarding-screen">
+      <div className="tayyar-onboarding-glow" />
+      <div className="tayyar-onboarding-wrap">
+        <div className="tayyar-auth-theme-toggle"><ThemeToggle /></div>
+        <Link href="/" className="tayyar-onboarding-brand"><span className="tayyar-brand-glyph">T</span><span className="tayyar-brand-copy"><strong>Tayyar</strong><small>AI EXAM PREPARATION</small></span></Link>
+        <div className="tayyar-onboarding-progress" aria-label={`Question ${onboarding.step} of 3`}>{[1, 2, 3].map((step) => <span key={step} className={step < onboarding.step ? "is-done" : step === onboarding.step ? "is-current" : ""}>{step < onboarding.step ? <Check /> : step}</span>)}</div>
+        <section className="tayyar-onboarding-card" aria-live="polite">
+          <p className="tayyar-mini-label">LET’S SET UP YOUR STUDY SPACE · {String(onboarding.step).padStart(2, "0")} / 03</p>
+          <h1>{onboarding.step === 1 ? "What should we call you?" : onboarding.step === 2 ? "How will you use Tayyar?" : "How did you hear about us?"}</h1>
+          <p className="tayyar-onboarding-description">{onboarding.step === 1 ? "This is how your name will appear across your learning workspace." : onboarding.step === 2 ? "We’ll shape your starting experience around the way you study." : "Your answer helps us make Tayyar easier for more students to find."}</p>
+
+          {onboarding.step === 1 && <div className="tayyar-onboarding-field"><label htmlFor="onboarding-name">YOUR NAME</label><div className="tayyar-onboarding-input-wrap"><User /><input id="onboarding-name" autoFocus autoComplete="name" placeholder="e.g. Ayesha Khan" value={onboarding.name} onChange={(event) => updateOnboarding({ name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter" && onboarding.name.trim().length >= 2) updateOnboarding({ step: 2 }) }} /></div></div>}
+
+          {onboarding.step === 2 && <><div className="tayyar-onboarding-options">{options.map(({ value, label, detail, icon: Icon }) => <button type="button" key={value} onClick={() => updateOnboarding({ studyContext: value })} className={`tayyar-onboarding-option ${onboarding.studyContext === value ? "is-selected" : ""}`} aria-pressed={onboarding.studyContext === value}><span className="tayyar-onboarding-option-icon"><Icon /></span><span><strong>{label}</strong>{detail && <small>{detail}</small>}</span><span className="tayyar-radio-check">{onboarding.studyContext === value && <Check />}</span></button>)}</div>{onboarding.studyContext === "University / college" && <div className="tayyar-academic-fields"><label>UNIVERSITY <input placeholder="Your university (optional)" value={onboarding.university} onChange={(event) => updateOnboarding({ university: event.target.value })} /></label><label>PROGRAM <input placeholder="e.g. BS Software Engineering" value={onboarding.program} onChange={(event) => updateOnboarding({ program: event.target.value })} /></label><label>SEMESTER <input placeholder="e.g. Semester 5" value={onboarding.semester} onChange={(event) => updateOnboarding({ semester: event.target.value })} /></label></div>}</>}
+
+          {onboarding.step === 3 && <div className="tayyar-onboarding-options">{options.map(({ value, label, icon: Icon }) => <button type="button" key={value} onClick={() => updateOnboarding({ source: value })} className={`tayyar-onboarding-option compact ${onboarding.source === value ? "is-selected" : ""}`} aria-pressed={onboarding.source === value}><span className="tayyar-onboarding-option-icon"><Icon /></span><span><strong>{label}</strong></span><span className="tayyar-radio-check">{onboarding.source === value && <Check />}</span></button>)}</div>}
+
+          {onboardingError && <p role="alert" className="tayyar-onboarding-error">{onboardingError}</p>}
+          <div className="tayyar-onboarding-actions">{onboarding.step > 1 && <button type="button" className="tayyar-onboarding-back" onClick={() => { setOnboardingError(""); updateOnboarding({ step: onboarding.step - 1 }) }}><ArrowLeft /> Back</button>}
+            {onboarding.step < 3 ? <button type="button" className="tayyar-onboarding-next" onClick={() => { if (onboarding.step === 1 && onboarding.name.trim().length < 2) { setOnboardingError("Please enter at least two characters."); return } setOnboardingError(""); updateOnboarding({ step: onboarding.step + 1 }) }}>Continue <ArrowRight /></button> : <button type="button" className="tayyar-onboarding-next" disabled={onboardingSaving} onClick={() => void finishOnboarding()}>{onboardingSaving ? "Saving your study profile…" : "Finish setup"} {!onboardingSaving && <ArrowRight />}</button>}
+          </div>
+        </section>
+        <p className="tayyar-onboarding-footnote">You can update your study details later from your dashboard.</p>
+      </div>
+    </main>
   }
 
   if (isLoading) {
@@ -106,34 +190,17 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="tayyar-auth-page tayyar-signup-page min-h-screen bg-background flex">
       {/* Left Side - Form */}
       <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
-        <div className="w-full max-w-xl ">
+        <div className="tayyar-auth-theme-toggle"><ThemeToggle /></div>
+        <div className="tayyar-auth-form-shell w-full max-w-lg">
           {/* Header */}
-          <div className="text-center space-y-4 ">
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-primary flex items-center justify-center shadow-lg">
-              <svg className="w-8 h-8 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-            </div>
+          <div className="text-center space-y-2">
+            <p className="tayyar-mini-label justify-center">CREATE YOUR STUDY SPACE</p>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Join Study Mode Agent</h1>
-              <p className="text-muted-foreground mt-2">Start your AI-powered learning journey today</p>
-            </div>
-            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-chart-1"></div>
-                <span>AI-Powered</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-chart-2"></div>
-                <span>Interactive</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-chart-3"></div>
-                <span>Smart</span>
-              </div>
+              <h1 className="text-3xl font-bold text-foreground">Join Tayyar</h1>
+              <p className="text-muted-foreground mt-2">A focused place for your course material, practice, and progress.</p>
             </div>
           </div>
 
@@ -462,78 +529,19 @@ export default function SignupPage() {
         </div>
       </div>
 
-      {/* Right Side - Education Visual */}
-      <div className="hidden lg:flex flex-1 items-center justify-center p-12 bg-gradient-to-br from-chart-1/5 via-chart-2/5 to-chart-3/5">
-        <div className="w-full max-w-lg space-y-8">
-          {/* Education Icons */}
-          <div className="grid grid-cols-3 gap-6">
-            <div className="text-center space-y-3">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-chart-1/10 flex items-center justify-center">
-                <svg className="w-8 h-8 text-chart-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-foreground">Learn</h3>
-              <p className="text-sm text-muted-foreground">Master concepts with AI guidance</p>
-            </div>
-            <div className="text-center space-y-3">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-chart-2/10 flex items-center justify-center">
-                <svg className="w-8 h-8 text-chart-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-foreground">Practice</h3>
-              <p className="text-sm text-muted-foreground">Interactive quizzes and exercises</p>
-            </div>
-            <div className="text-center space-y-3">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-chart-3/10 flex items-center justify-center">
-                <svg className="w-8 h-8 text-chart-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-foreground">Track</h3>
-              <p className="text-sm text-muted-foreground">Monitor your learning progress</p>
-            </div>
+      <aside className="tayyar-login-side">
+        <div className="tayyar-login-side-content">
+          <Link href="/" className="tayyar-auth-side-brand"><span className="tayyar-brand-glyph">T</span><span className="tayyar-brand-copy"><strong>Tayyar</strong><small>AI EXAM PREPARATION</small></span></Link>
+          <p className="tayyar-auth-side-pill"><BookOpen /> A STUDY PLAN THAT STARTS WITH YOU</p>
+          <h2>Make your study time<br /><span>count for more.</span></h2>
+          <p className="tayyar-login-side-lede">Build a study space around your subjects, course material, and the topics you want to strengthen.</p>
+          <div className="tayyar-login-benefits">
+            <div><span><FileText /></span><p><strong>Bring your course material</strong><small>Keep practice connected to the notes and PDFs you use.</small></p></div>
+            <div><span><Brain /></span><p><strong>Learn from each attempt</strong><small>Review quiz results and return to topics that need practice.</small></p></div>
+            <div><span><BookOpen /></span><p><strong>Build a steady routine</strong><small>Track your progress and prepare for the exams ahead.</small></p></div>
           </div>
-
-          {/* AI Brain Visual */}
-          <div className="text-center space-y-4">
-            <div className="relative mx-auto w-32 h-32">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-r from-chart-1/20 to-chart-2/20 animate-pulse"></div>
-              <div className="absolute inset-2 rounded-full bg-gradient-to-r from-chart-1/30 to-chart-2/30 animate-pulse" style={{ animationDelay: '0.5s' }}></div>
-              <div className="absolute inset-4 rounded-full bg-gradient-to-r from-chart-1/40 to-chart-2/40 flex items-center justify-center">
-                <svg className="w-12 h-12 text-chart-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              </div>
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">AI-Powered Learning</h2>
-              <p className="text-muted-foreground">Experience personalized education with our advanced AI system that adapts to your learning style and pace.</p>
-            </div>
-          </div>
-
-          {/* Features List */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <div className="w-2 h-2 rounded-full bg-chart-1"></div>
-              <span>Personalized study plans</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <div className="w-2 h-2 rounded-full bg-chart-2"></div>
-              <span>Interactive quizzes and assessments</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <div className="w-2 h-2 rounded-full bg-chart-3"></div>
-              <span>Real-time progress tracking</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <div className="w-2 h-2 rounded-full bg-chart-4"></div>
-              <span>Smart recommendations</span>
-            </div>
-          </div>
+          <p className="tayyar-login-side-foot"><span /> Your progress, your pace, your next step.</p>
         </div>
-      </div>
-    </div>
+      </aside>    </div>
   )
 }

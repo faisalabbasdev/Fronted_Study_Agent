@@ -6,18 +6,17 @@ import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "react-hot-toast"
 import "./globals.css"
 import SiteHeader from "@/components/site-header"
-import AnimatedBackground from "@/components/animated-background"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { LoadingProvider } from "@/contexts/LoadingContext"
 import { Suspense } from "react"
 
 export const metadata: Metadata = {
-  title: "Study Mode Agent - AI-Powered Learning Platform",
-  description: "Transform your learning experience with our AI-powered study assistant. Get personalized explanations, practice with intelligent quizzes, and track your progress with advanced analytics.",
+  title: "Tayyar — AI Exam Preparation",
+  description: "Study from your own course materials, review mistakes, strengthen weak topics, and follow a personalized exam-preparation plan.",
   keywords: ["AI learning", "study assistant", "education technology", "personalized learning", "quiz platform"],
-  authors: [{ name: "Study Mode Agent Team" }],
-  creator: "Study Mode Agent",
-  publisher: "Study Mode Agent",
+  authors: [{ name: "Tayyar" }],
+  creator: "Tayyar",
+  publisher: "Tayyar",
   formatDetection: {
     email: false,
     address: false,
@@ -25,16 +24,16 @@ export const metadata: Metadata = {
   },
   metadataBase: new URL("https://studymodeagent.com"),
   openGraph: {
-    title: "Study Mode Agent - AI-Powered Learning Platform",
-    description: "Transform your learning experience with our AI-powered study assistant.",
+    title: "Tayyar — AI Exam Preparation",
+    description: "Source-grounded quizzes, practice readiness, and personalized daily revision for university students.",
     url: "https://studymodeagent.com",
-    siteName: "Study Mode Agent",
+    siteName: "Tayyar",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Study Mode Agent - AI-Powered Learning Platform",
+        alt: "Tayyar — AI Exam Preparation",
       },
     ],
     locale: "en_US",
@@ -42,8 +41,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Study Mode Agent - AI-Powered Learning Platform",
-    description: "Transform your learning experience with our AI-powered study assistant.",
+    title: "Tayyar — AI Exam Preparation",
+    description: "Source-grounded quizzes and personalized revision based on your study materials.",
     images: ["/og-image.png"],
   },
   robots: {
@@ -69,10 +68,6 @@ export default function RootLayout({
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AuthProvider>
           <LoadingProvider>
-            {/* Background runs behind all content */}
-            <Suspense fallback={null}>
-              <AnimatedBackground />
-            </Suspense>
             {/* Sticky header across all pages */}
             <Suspense fallback={null}>
               <SiteHeader />

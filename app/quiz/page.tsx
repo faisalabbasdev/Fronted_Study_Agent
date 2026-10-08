@@ -37,6 +37,10 @@ interface QuizQuestion {
   explanation: string
   difficulty: string
   topic: string
+  subject_id?: number
+  subject?: string
+  source?: { material_id: number; title: string; page: number }
+  source_evidence?: string
 }
 
 interface QuizData {
@@ -60,6 +64,9 @@ interface QuizResult {
   time_taken: number
   feedback: string[]
   recommendations: string[]
+  topic_performance?: Array<{ topic: string; percentage: number; correct: number; total: number }>
+  weakest_topic?: string | null
+  current_streak?: number
 }
 
 function QuizContent() {
@@ -79,12 +86,18 @@ function QuizContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [oneMinuteWarningShown, setOneMinuteWarningShown] = useState(false)
+  const [simpleExplanations, setSimpleExplanations] = useState<Record<string, string>>({})
+  const [explainingQuestionId, setExplainingQuestionId] = useState<string | null>(null)
   
   // Quiz parameters from URL
   const topic = searchParams.get('topic') || 'General Knowledge'
   const difficulty = searchParams.get('difficulty') || 'medium'
   const numQuestions = parseInt(searchParams.get('numQuestions') || '10')
   const timeLimit = parseInt(searchParams.get('timeLimit') || '20')
+  const mode = searchParams.get('mode') || 'general'
+  const subjectId = Number(searchParams.get('subjectId')) || undefined
+  const materialId = Number(searchParams.get('materialId')) || undefined
+  const focusTopics = (searchParams.get('topics') || '').split(',').map((item) => item.trim()).filter(Boolean)
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -124,111 +137,30 @@ function QuizContent() {
     try {
       setLoading(true)
       setError(null)
-      
-      // Use the professional quiz generation API
-      
-      try {
-        const response = await apiClient.generateQuiz({
-          subject: topic,
-          difficulty: difficulty,
-          num_questions: numQuestions,
-          topics: [topic],
-          learning_objectives: [
-            `Understand ${topic} concepts`,
-            `Apply ${topic} knowledge`, 
-            `Analyze ${topic} problems`
-          ],
-          time_limit: timeLimit
-        })
-        
-        setQuizData(response)
-        setTimeRemaining(response.estimated_time * 60)
-        return
-        
-      } catch (apiError) {
-        console.warn('Professional quiz API failed, trying AI agent fallback:', apiError)
-        
-        // Fallback to AI agent with retry logic
-        let maxRetries = 3
-        let retryCount = 0
-        
-        while (retryCount < maxRetries) {
-          try {
-            
-            // Use the AI agent to generate quiz questions
-            const agentResponse = await apiClient.chatWithAgent({
-              message: `Generate a comprehensive ${difficulty} level quiz about ${topic} with exactly ${numQuestions} multiple choice questions. 
-
-CRITICAL REQUIREMENTS:
-- All questions must be FACTUALLY ACCURATE
-- Correct answers must be 100% correct
-- Wrong options must be plausible but clearly incorrect
-- Questions must be specifically about ${topic}
-- Difficulty level: ${difficulty}
-- Generate EXACTLY ${numQuestions} questions, no more, no less
-
-FORMAT (use this EXACT format):
-Question 1: [Your question here]
-A) [Option A]
-B) [Option B] 
-C) [Option C]
-D) [Option D]
-Correct Answer: [A/B/C/D]
-Explanation: [Detailed explanation of why the correct answer is right]
-
-Question 2: [Your question here]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
-Correct Answer: [A/B/C/D]
-Explanation: [Detailed explanation of why the correct answer is right]
-
-Continue this pattern for all ${numQuestions} questions. Double-check that all correct answers are factually accurate.`,
-              context: {
-                mode: 'quiz_generation',
-                topic: topic,
-                difficulty: difficulty,
-                num_questions: numQuestions,
-                time_limit: timeLimit,
-                user_level: 'student',
-                retry_attempt: retryCount + 1
-              }
-            })
-            
-            if (agentResponse && agentResponse.response) {
-              // Parse the AI response to extract quiz questions
-              const parsedQuiz = parseAIQuizResponse(agentResponse.response, topic, difficulty, numQuestions, timeLimit)
-              if (parsedQuiz && parsedQuiz.questions.length >= numQuestions) {
-                setQuizData(parsedQuiz)
-                setTimeRemaining(parsedQuiz.estimated_time * 60)
-                return
-              } else {
-                console.warn(`AI agent generated only ${parsedQuiz?.questions.length || 0} questions, need ${numQuestions}`)
-              }
-            }
-            
-            retryCount++
-            if (retryCount < maxRetries) {
-              await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second before retry
-            }
-            
-          } catch (agentError) {
-            console.warn(`AI agent attempt ${retryCount + 1} failed:`, agentError)
-            retryCount++
-            if (retryCount < maxRetries) {
-              await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second before retry
-            }
-          }
-        }
-        
-        // If all attempts failed, show error
-        throw new Error('Both professional quiz API and AI agent failed to generate accurate quiz. Please try again.')
-      }
-      
+      const response = await apiClient.generateQuiz({
+        subject: topic,
+        difficulty,
+        num_questions: numQuestions,
+        learning_objectives: [
+          `Understand ${topic} concepts`,
+          `Apply ${topic} knowledge`,
+          `Analyze ${topic} problems`,
+        ],
+        time_limit: timeLimit,
+        mode: mode as 'general' | 'material' | 'topic' | 'weak' | 'mistake' | 'exam' | 'daily',
+        subject_id: subjectId,
+        material_id: materialId,
+        topics: focusTopics.length > 0
+          ? focusTopics
+          : mode === "weak" || mode === "mistake"
+            ? []
+            : [topic],
+      })
+      setQuizData(response)
+      setTimeRemaining(response.estimated_time * 60)
     } catch (err) {
       console.error('Failed to generate quiz:', err)
-      setError('Failed to generate quiz. The AI agent could not create accurate questions. Please try again.')
+      setError(err instanceof Error ? err.message : 'Failed to generate quiz. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -243,6 +175,43 @@ Continue this pattern for all ${numQuestions} questions. Double-check that all c
       ...prev,
       [questionId]: answer
     }))
+  }
+
+  const explainSimply = async (question: QuizQuestion) => {
+    setExplainingQuestionId(question.id)
+    try {
+      const correctIndex = question.correct_answer.charCodeAt(0) - 65
+      const result = await apiClient.getExplanation({
+        message: `Explain this missed ${question.topic} question simply. Use a short definition, a plain-language explanation, a real-life example, and finish with one new practice question. Question: ${question.question}. Correct answer: ${question.options[correctIndex]}. Explanation: ${question.explanation}`,
+      })
+      setSimpleExplanations((current) => ({
+        ...current,
+        [question.id]: result.response || result.message || "No explanation was returned.",
+      }))
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not load the explanation.", "error")
+    } finally {
+      setExplainingQuestionId(null)
+    }
+  }
+
+  const practiceSimilarQuestion = (question: QuizQuestion) => {
+    const params = new URLSearchParams({
+      mode: subjectId ? "topic" : "general",
+      topic: quizData?.subject || topic,
+      topics: question.topic || topic,
+      numQuestions: "5",
+    })
+    if (subjectId) params.set("subjectId", String(subjectId))
+    router.push(`/quiz-setup?${params.toString()}`)
+  }
+
+  const openSource = async (sourceMaterialId: number) => {
+    try {
+      await apiClient.openMaterialSource(sourceMaterialId)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not open the source PDF.", "error")
+    }
   }
 
   const nextQuestion = () => {
@@ -287,10 +256,6 @@ Continue this pattern for all ${numQuestions} questions. Double-check that all c
         is_correct: selectedAnswers[question.id] === question.correct_answer
       }))
 
-      // Calculate score locally
-      const correctAnswers = answersForSubmission.filter(answer => answer.is_correct).length
-      const totalQuestions = answersForSubmission.length
-      const score = (correctAnswers / totalQuestions) * 100
       const timeTaken = (quizData.estimated_time * 60) - timeRemaining
 
       // Prepare questions data for detailed review
@@ -302,69 +267,32 @@ Continue this pattern for all ${numQuestions} questions. Double-check that all c
           correct_answer: question.correct_answer,
           user_answer: selectedAnswers[question.id] || "",
           is_correct: selectedAnswers[question.id] === question.correct_answer,
-          explanation: question.explanation || `This question tests your understanding of ${quizData.subject}.`
+          explanation: question.explanation || `This question tests your understanding of ${quizData.subject}.`,
+          topic: question.topic,
+          subject_id: question.subject_id || subjectId,
+          subject: question.subject || quizData.subject,
+          source: question.source,
+          source_evidence: question.source_evidence,
         }
       })
 
-      // Try to submit to API first, but have fallback
-      try {
-        const response = await apiClient.submitQuiz({
-          quiz_id: quizData.quiz_id,
-          answers: answersForSubmission,
-          time_taken: timeTaken,
-          questions_data: questionsData,
-          topic: quizData.subject,
-          difficulty: quizData.difficulty
-        })
-        setQuizResult(response)
-      } catch (apiError) {
-        console.warn('API submission failed, using local calculation:', apiError)
-        
-        // Fallback: Calculate results locally
-        const feedback = []
-        const recommendations = []
-        
-        if (score >= 90) {
-          feedback.push("Excellent work! You have mastered this topic.")
-          recommendations.push("Try more advanced questions to challenge yourself")
-        } else if (score >= 80) {
-          feedback.push("Great job! You have a strong understanding of this topic.")
-          recommendations.push("Continue practicing to maintain your knowledge")
-        } else if (score >= 70) {
-          feedback.push("Good work! You have a solid understanding of most concepts.")
-          recommendations.push("Review the questions you missed and practice more")
-        } else if (score >= 60) {
-          feedback.push("Not bad! You're making progress in this subject.")
-          recommendations.push("Focus on the areas where you struggled")
-        } else {
-          feedback.push("Keep practicing! Every mistake is a learning opportunity.")
-          recommendations.push("Review the fundamental concepts before trying again")
-        }
-        
-        feedback.push(`You answered ${correctAnswers} out of ${totalQuestions} questions correctly.`)
-        feedback.push(`Your score: ${score.toFixed(1)}%`)
-        
-        recommendations.push("Take another quiz to reinforce your learning")
-        recommendations.push("Review the explanations for questions you missed")
-
-        const localResult: QuizResult = {
-          quiz_id: quizData.quiz_id,
-          score: score,
-          total_questions: totalQuestions,
-          correct_answers: correctAnswers,
-          time_taken: timeTaken,
-          feedback: feedback,
-          recommendations: recommendations
-        }
-        
-        setQuizResult(localResult)
-      }
+      const response = await apiClient.submitQuiz({
+        quiz_id: quizData.quiz_id,
+        answers: answersForSubmission,
+        time_taken: timeTaken,
+        questions_data: questionsData,
+        topic: quizData.subject,
+        difficulty: quizData.difficulty,
+        subject_id: subjectId,
+        mode,
+      })
+      setQuizResult(response)
 
       setShowResult(true)
       setQuizStarted(false)
     } catch (err) {
       console.error('Failed to submit quiz:', err)
-      setError('Failed to submit quiz. Please try again.')
+      setError(err instanceof Error ? err.message : 'Failed to submit quiz. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -387,124 +315,6 @@ Continue this pattern for all ${numQuestions} questions. Double-check that all c
     const minutes = Math.floor(seconds / 60)
     const remainingSeconds = seconds % 60
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-  }
-
-  // Validation function to ensure quiz accuracy
-  const validateQuizQuestions = (questions: QuizQuestion[]): QuizQuestion[] => {
-    return questions.map(question => {
-      // Ensure correct_answer is valid
-      if (!['A', 'B', 'C', 'D'].includes(question.correct_answer)) {
-        console.warn(`Invalid correct_answer for question ${question.id}: ${question.correct_answer}`)
-        question.correct_answer = 'A' // Default fallback
-      }
-      
-      // Ensure options array has exactly 4 items
-      if (!question.options || question.options.length !== 4) {
-        console.warn(`Invalid options for question ${question.id}`)
-        question.options = ["Option A", "Option B", "Option C", "Option D"]
-      }
-      
-      // Ensure question text exists
-      if (!question.question || question.question.trim() === '') {
-        console.warn(`Empty question text for question ${question.id}`)
-        question.question = `Question about ${question.topic}`
-      }
-      
-      return question
-    })
-  }
-
-  // Removed fallback question generation - now using only AI agent
-
-  const parseAIQuizResponse = (response: string, topic: string, difficulty: string, numQuestions: number, timeLimit: number): QuizData | null => {
-    try {
-      
-      // More flexible parsing - handle different formats
-      const questionRegex = /Question\s+(\d+):\s*([^\n]+)/gi
-      const optionRegex = /^[A-D][\.\)]\s+(.+)$/gm
-      const answerRegex = /correct\s+answer:?\s*([A-D])/gi
-      const explanationRegex = /explanation:?\s*(.+)$/gim
-      
-      const questions: QuizQuestion[] = []
-      let match
-      
-      // Find all questions
-      const questionMatches = [...response.matchAll(questionRegex)]
-      
-      for (let i = 0; i < questionMatches.length && questions.length < numQuestions; i++) {
-        const questionMatch = questionMatches[i]
-        const questionNumber = questionMatch[1]
-        const questionText = questionMatch[2].trim()
-        
-        // Find the section for this question
-        const questionStart = questionMatch.index!
-        const nextQuestionStart = i + 1 < questionMatches.length ? questionMatches[i + 1].index! : response.length
-        const questionSection = response.substring(questionStart, nextQuestionStart)
-        
-        // Extract options
-        const options: string[] = []
-        const optionMatches = [...questionSection.matchAll(optionRegex)]
-        for (const optionMatch of optionMatches) {
-          const optionText = optionMatch[1].trim()
-          if (optionText) {
-            options.push(optionText)
-          }
-        }
-        
-        // Extract correct answer
-        const answerMatch = questionSection.match(answerRegex)
-        const correctAnswer = answerMatch ? answerMatch[1].toUpperCase() : ''
-        
-        // Extract explanation
-        const explanationMatch = questionSection.match(explanationRegex)
-        const explanation = explanationMatch ? explanationMatch[1].trim() : `This question tests your understanding of ${topic}.`
-        
-        // Validate we have all required components
-        if (questionText && options.length >= 4 && correctAnswer && ['A', 'B', 'C', 'D'].includes(correctAnswer)) {
-          // Ensure we have exactly 4 options
-          const finalOptions = options.slice(0, 4)
-          if (finalOptions.length === 4) {
-            questions.push({
-              id: `q_${questions.length + 1}`,
-              question: questionText,
-              options: finalOptions,
-              correct_answer: correctAnswer,
-              explanation: explanation,
-              difficulty: difficulty,
-              topic: topic
-            })
-          }
-        }
-      }
-      
-      
-      // If we got enough questions from AI, use them
-      if (questions.length >= numQuestions) {
-        const validatedQuestions = validateQuizQuestions(questions.slice(0, numQuestions))
-        return {
-          quiz_id: `ai_quiz_${topic.toLowerCase().replace(/\s+/g, '-')}_${difficulty}_${Date.now()}`,
-          title: `${topic} Quiz (AI Generated)`,
-          subject: topic,
-          difficulty: difficulty,
-          questions: validatedQuestions,
-          total_questions: validatedQuestions.length,
-          estimated_time: timeLimit,
-          learning_objectives: [
-            `Understand ${topic} concepts`,
-            `Apply ${topic} knowledge`,
-            `Analyze ${topic} problems`
-          ],
-          passing_score: 70.0,
-          created_at: new Date().toISOString()
-        }
-      }
-      
-      console.warn(`AI generated only ${questions.length} questions, need ${numQuestions}`)
-      return null
-    } catch (error) {
-      console.error('Error parsing AI quiz response:', error)
-      return null
-    }
   }
 
   // Show loading state
@@ -693,6 +503,74 @@ Continue this pattern for all ${numQuestions} questions. Double-check that all c
               </ul>
             </div>
 
+            {quizResult.topic_performance && quizResult.topic_performance.length > 0 && (
+              <div className="space-y-3 rounded-lg border p-4 text-left">
+                <h3 className="font-semibold">Topic performance · Practice Readiness Estimate</h3>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {quizResult.topic_performance.map((item) => (
+                    <div key={item.topic} className="flex items-center justify-between rounded bg-muted/40 px-3 py-2 text-sm">
+                      <span>{item.topic}</span>
+                      <span className={item.percentage < 60 ? "font-semibold text-red-600" : "font-semibold"}>
+                        {item.percentage}% ({item.correct}/{item.total})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {quizResult.weakest_topic && (
+                  <p className="text-sm text-muted-foreground">
+                    Your weakest topic this time is <strong>{quizResult.weakest_topic}</strong>. Practice it next.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {quizResult.current_streak !== undefined && (
+              <p className="text-sm text-muted-foreground">🔥 Current learning streak: {quizResult.current_streak} day{quizResult.current_streak === 1 ? "" : "s"}</p>
+            )}
+
+            <div className="space-y-3 text-left">
+              <h3 className="font-semibold">Review your answers</h3>
+              {quizData?.questions.map((question) => {
+                const selected = selectedAnswers[question.id] || ""
+                const correct = selected === question.correct_answer
+                if (correct) return null
+                const selectedIndex = selected ? selected.charCodeAt(0) - 65 : -1
+                const correctIndex = question.correct_answer.charCodeAt(0) - 65
+                return (
+                  <div key={question.id} className="space-y-2 rounded-lg border p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Badge variant="outline">{question.topic}</Badge>
+                      {!correct && <Badge variant="destructive">Incorrect</Badge>}
+                    </div>
+                    <p className="font-medium">{question.question}</p>
+                    <p className="text-sm text-red-700">Your answer: {selectedIndex >= 0 ? question.options[selectedIndex] : "Not answered"}</p>
+                    <p className="text-sm text-green-700">Correct answer: {question.options[correctIndex]}</p>
+                    <p className="text-sm text-muted-foreground">Why? {question.explanation}</p>
+                    {question.source && (
+                      <p className="text-sm text-muted-foreground">
+                        Source: {question.source.title} · Page {question.source.page}{" "}
+                        <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void openSource(question.source!.material_id)}>
+                          View Source
+                        </Button>
+                      </p>
+                    )}
+                    {simpleExplanations[question.id] && (
+                      <p className="rounded bg-muted/50 p-3 text-sm">{simpleExplanations[question.id]}</p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => void explainSimply(question)} disabled={explainingQuestionId === question.id}>
+                        {explainingQuestionId === question.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4" />}
+                        Explain Simply
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => practiceSimilarQuestion(question)}>
+                        Try a similar question
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
             <div className="flex gap-4 justify-center">
               <Button onClick={restartQuiz} variant="outline">
                 <RotateCcw className="h-4 w-4 mr-2" />
@@ -862,6 +740,15 @@ Continue this pattern for all ${numQuestions} questions. Double-check that all c
             <div className="text-lg font-medium">
               {currentQuestion.question}
             </div>
+            {currentQuestion.source && (
+              <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                <BookOpen className="h-4 w-4" />
+                Source: {currentQuestion.source.title}, page {currentQuestion.source.page}
+                <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void openSource(currentQuestion.source!.material_id)}>
+                  View Source
+                </Button>
+              </div>
+            )}
 
             <div className="space-y-3">
               {currentQuestion.options.map((option, index) => {

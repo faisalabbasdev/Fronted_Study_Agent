@@ -33,8 +33,30 @@ export interface LoginData {
   password: string
 }
 
+export interface StudentSubject {
+  id: number
+  name: string
+  university?: string | null
+  program?: string | null
+  semester?: string | null
+  exam_date?: string | null
+  days_until_exam?: number | null
+  questions_attempted: number
+  average_score: number
+  practice_mastery: number
+  weak_topics: Array<{ topic: string; mastery: number }>
+  topic_performance: Array<{ topic: string; mastery: number; questions_attempted: number; weak: boolean }>
+  materials: Array<{
+    id: number
+    title: string
+    material_type: string
+    page_count: number
+    topics: string[]
+  }>
+}
+
 export interface ApiError {
-  detail: string
+  detail: string | Array<{ msg?: string }>
   status_code?: number
 }
 
@@ -71,7 +93,10 @@ class ApiClient {
           detail: `HTTP ${response.status}: ${response.statusText}`,
           status_code: response.status
         }))
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`)
+        const detail = Array.isArray(errorData.detail)
+          ? errorData.detail.map((issue) => issue.msg || "Invalid request").join("; ")
+          : errorData.detail
+        throw new Error(detail || `HTTP ${response.status}: ${response.statusText}`)
       }
 
       return await response.json()
@@ -107,6 +132,13 @@ class ApiClient {
 
   async getCurrentUser(): Promise<User> {
     return this.request<User>('/api/v1/auth/me')
+  }
+
+  async updateCurrentUser(data: { full_name?: string; preferences?: Record<string, any> }): Promise<User> {
+    return this.request<User>('/api/v1/auth/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
   }
 
   async getWeakestSubject(): Promise<{
@@ -279,6 +311,9 @@ class ApiClient {
     topics?: string[]
     learning_objectives?: string[]
     time_limit?: number
+    mode?: 'general' | 'material' | 'topic' | 'weak' | 'mistake' | 'exam' | 'daily'
+    subject_id?: number
+    material_id?: number
   }): Promise<any> {
     return this.request<any>('/api/v1/professional/quiz/generate', {
       method: 'POST',
@@ -297,6 +332,8 @@ class ApiClient {
     questions_data?: Record<string, any>
     topic?: string
     difficulty?: string
+    subject_id?: number
+    mode?: string
   }): Promise<any> {
     return this.request<any>('/api/v1/professional/quiz/submit', {
       method: 'POST',
@@ -315,6 +352,104 @@ class ApiClient {
 
   async getQuizDifficulties(): Promise<any> {
     return this.request<any>('/api/v1/professional/quiz/difficulties')
+  }
+
+  async getLearningOverview(): Promise<any> {
+    return this.request<any>('/api/v1/learning/overview')
+  }
+
+  async getLearningSubjects(): Promise<StudentSubject[]> {
+    return this.request<StudentSubject[]>('/api/v1/learning/subjects')
+  }
+
+  async createLearningSubject(data: {
+    name: string
+    university?: string
+    program?: string
+    semester?: string
+    exam_date?: string | null
+  }): Promise<StudentSubject> {
+    const { exam_date, ...subjectData } = data
+    return this.request<StudentSubject>('/api/v1/learning/subjects', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...subjectData,
+        ...(exam_date?.trim() ? { exam_date: exam_date.trim() } : {}),
+      }),
+    })
+  }
+
+  async updateLearningSubject(subjectId: number, data: {
+    name?: string
+    university?: string
+    program?: string
+    semester?: string
+    exam_date?: string | null
+  }): Promise<StudentSubject> {
+    return this.request<StudentSubject>(`/api/v1/learning/subjects/${subjectId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async uploadStudyMaterial(
+    subjectId: number,
+    file: File,
+    materialType: 'lecture' | 'book' | 'slides' | 'past_paper',
+  ): Promise<any> {
+    const token = tokenManager.getToken()
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('material_type', materialType)
+    const response = await fetch(`${this.baseURL}/api/v1/learning/subjects/${subjectId}/materials`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }))
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+    return response.json()
+  }
+
+  async openMaterialSource(materialId: number, page?: number): Promise<void> {
+    const sourceTab = window.open("about:blank", "_blank")
+    if (!sourceTab) {
+      throw new Error("Allow pop-ups to view your source PDF")
+    }
+    const token = tokenManager.getToken()
+    try {
+      const response = await fetch(`${this.baseURL}/api/v1/learning/materials/${materialId}/source`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }))
+        throw new Error(errorData.detail || `HTTP ${response.status}`)
+      }
+      const sourceUrl = URL.createObjectURL(await response.blob())
+      sourceTab.location.href = page ? `${sourceUrl}#page=${page}` : sourceUrl
+      window.setTimeout(() => URL.revokeObjectURL(sourceUrl), 60_000)
+    } catch (error) {
+      sourceTab.close()
+      throw error
+    }
+  }
+
+  async getDailyRecommendation(subjectId?: number): Promise<any> {
+    const query = subjectId ? `?subject_id=${subjectId}` : ''
+    return this.request<any>(`/api/v1/learning/recommendations/daily${query}`)
+  }
+
+  async analyzePastPaper(materialId: number): Promise<any> {
+    return this.request<any>(`/api/v1/learning/materials/${materialId}/analyze`, {
+      method: 'POST',
+    })
+  }
+
+  async getMistakes(subjectId?: number): Promise<any> {
+    const query = subjectId ? `?subject_id=${subjectId}` : ''
+    return this.request<any>(`/api/v1/learning/mistakes${query}`)
   }
 
   // Memory endpoints

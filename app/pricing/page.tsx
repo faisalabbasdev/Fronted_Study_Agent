@@ -1,74 +1,37 @@
-import { PricingCard } from "@/components/pricing/pricing-card"
-import Image from "next/image"
+import Link from "next/link"
+import { ArrowRight, BookOpen, CalendarDays, Check, FileText, Target } from "lucide-react"
+import SiteFooter from "@/components/site-footer"
+
+const included = [
+  { icon: FileText, label: "Study materials", detail: "PDF notes, books, slides, and past papers" },
+  { icon: BookOpen, label: "Focused practice", detail: "Material, topic, weak-topic, mistake, and exam-style quizzes" },
+  { icon: Target, label: "Progress tools", detail: "Topic history, mistake review, and practice mastery estimates" },
+  { icon: CalendarDays, label: "Study planning", detail: "Daily recommendations, review timing, and subject exam dates" },
+]
 
 export default function PricingPage() {
-  return (
-    <main className="mx-auto max-w-6xl px-4 py-12">
-      <header className="text-center">
-        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Choose Your Plan</h1>
-        <p className="mt-2 text-muted-foreground">Start free, upgrade when you need more power</p>
-      </header>
-
-      <section aria-label="Plans" className="mt-8 grid gap-6 md:grid-cols-3">
-        <PricingCard
-          name="Pro"
-          tagline="Perfect for personal use"
-          price="3.59"
-          oldPrice="4.99"
-          savings="You save $1.40 (−28%)"
-          cta="Try for Free"
-          features={[
-            "Unlimited reminders",
-            "Smart scheduling",
-            "WhatsApp integration",
-            "Basic analytics",
-            "Email support",
-            "Mobile notifications",
-            "Custom integrations",
-          ]}
-        />
-        <PricingCard
-          name="Supernova"
-          tagline="For power users and teams"
-          price="9.99"
-          oldPrice="14.99"
-          savings="You save $5.00 (−33%)"
-          cta="Activate Now"
-          popular
-          features={[
-            "Everything in Pro",
-            "Advanced AI insights",
-            "Team collaboration",
-            "Priority support",
-            "Custom integrations",
-            "Advanced analytics",
-            "API access",
-            "Unlimited team members",
-          ]}
-        />
-        <PricingCard
-          name="Supernova Lifetime"
-          tagline="Best value — pay once, use forever"
-          price="299"
-          cadence="/"
-          oldPrice="599"
-          savings="You save $300 (−50%)"
-          cta="Get Lifetime Access"
-          oneTime
-          features={[
-            "Everything in Supernova",
-            "Lifetime access",
-            "All future updates",
-            "Premium support forever",
-            "Early feature access",
-            "Exclusive community",
-            "White‑label options",
-            "Custom branding",
-          ]}
-        />
-      </section>
-
-     
-    </main>
-  )
+  return <div className="tayyar-marketing-page tayyar-pricing-page">
+    <section className="tayyar-pricing-heading">
+      <p className="tayyar-mini-label"><span className="tayyar-live-indicator" /> TAYYAR STUDY WORKSPACE</p>
+      <h1>One workspace.<br /><span>What’s included.</span></h1>
+      <p>See what’s included in Tayyar today. This project has no paid tiers or billing configured, so the page shows the current workspace without made-up prices.</p>
+    </section>
+    <section className="tayyar-pricing-cards" aria-label="Current Tayyar workspace">
+      <article className="tayyar-pricing-card is-featured">
+        <span className="tayyar-pricing-popular">CURRENT WORKSPACE</span>
+        <div className="tayyar-pricing-kicker"><span /> ONE STUDY SPACE</div>
+        <div className="tayyar-pricing-body">
+          <div className="tayyar-pricing-summary">
+            <div className="tayyar-pricing-icon"><BookOpen /></div>
+            <h2>Everything for focused exam preparation.</h2>
+            <p className="tayyar-pricing-description">Use your course materials, practice what needs work, and keep your progress together in one student workspace.</p>
+            <div className="tayyar-pricing-included"><strong>Billing not configured</strong><span>All features currently available are part of this workspace.</span></div>
+            <Link href="/signup" className="tayyar-pricing-cta is-bright">Create your study space <ArrowRight /></Link>
+          </div>
+          <ul className="tayyar-pricing-included-list">{included.map(({ icon: Icon, label, detail }) => <li key={label}><span className="tayyar-pricing-list-icon"><Icon /></span><span><strong>{label}</strong><small>{detail}</small></span><Check className="tayyar-pricing-list-check" /></li>)}</ul>
+        </div>
+      </article>
+    </section>
+    <SiteFooter />
+  </div>
 }

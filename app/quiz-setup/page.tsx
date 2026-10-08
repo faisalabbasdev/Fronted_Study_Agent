@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,12 +21,14 @@ import {
   Loader2
 } from "lucide-react"
 import { StudyLoader } from "@/components/ui/study-loader"
+import { apiClient, StudentSubject } from "@/lib/api"
 
 interface QuizSetupData {
   topic: string
   difficulty: 'easy' | 'medium' | 'hard'
   numQuestions: number
   timeLimit: number
+  mode: 'general' | 'material' | 'topic' | 'weak' | 'mistake' | 'exam' | 'daily'
 }
 
 const difficultyOptions = [
@@ -81,18 +83,56 @@ export default function QuizSetupPage() {
     topic: '',
     difficulty: 'medium',
     numQuestions: 10,
-    timeLimit: 20
+    timeLimit: 20,
+    mode: 'general'
   })
   
   const [topicError, setTopicError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [customTopic, setCustomTopic] = useState('')
+  const [subjects, setSubjects] = useState<StudentSubject[]>([])
+  const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null)
+  const [selectedMaterialId, setSelectedMaterialId] = useState<number | null>(null)
+  const [focusTopics, setFocusTopics] = useState('')
 
   // Redirect if not authenticated
   if (!isLoading && !isAuthenticated) {
     router.push("/login")
     return null
   }
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    apiClient.getLearningSubjects()
+      .then((items) => setSubjects(items))
+      .catch((error) => console.error("Failed to load study subjects:", error))
+
+    const params = new URLSearchParams(window.location.search)
+    const mode = params.get("mode")
+    const subjectId = Number(params.get("subjectId"))
+    const topic = params.get("topic") || ""
+    const topics = params.get("topics") || ""
+    const questionCount = Number(params.get("numQuestions"))
+    if (mode && ["general", "material", "topic", "weak", "mistake", "exam", "daily"].includes(mode)) {
+      setSetupData((previous) => ({ ...previous, mode: mode as QuizSetupData["mode"] }))
+    }
+    if (Number.isInteger(subjectId) && subjectId > 0) setSelectedSubjectId(subjectId)
+    if (topic) {
+      setCustomTopic(topic)
+      setSetupData((previous) => ({ ...previous, topic }))
+    }
+    if (topics) setFocusTopics(topics.split(",").join(", "))
+    if (questionCount >= 5 && questionCount <= 20) handleQuestionCountChange(questionCount)
+  }, [isAuthenticated])
+
+  const selectedSubject = subjects.find((subject) => subject.id === selectedSubjectId)
+
+  useEffect(() => {
+    if (selectedSubject && !customTopic.trim()) {
+      setCustomTopic(selectedSubject.name)
+      setSetupData((previous) => previous.topic ? previous : { ...previous, topic: selectedSubject.name })
+    }
+  }, [selectedSubject, customTopic])
 
   const validateTopic = (topic: string): boolean => {
     const lowerTopic = topic.toLowerCase().trim()
@@ -130,8 +170,12 @@ export default function QuizSetupPage() {
   }
 
   const handleGenerateQuiz = async () => {
-    if (!setupData.topic && !customTopic.trim()) {
+    if (!setupData.topic && !customTopic.trim() && !selectedSubject) {
       setTopicError("Please enter a topic for your quiz")
+      return
+    }
+    if (setupData.mode !== 'general' && !selectedSubjectId) {
+      setTopicError("Choose one of your subjects for personalized practice")
       return
     }
     
@@ -142,13 +186,19 @@ export default function QuizSetupPage() {
     setIsGenerating(true)
     
     // Prepare quiz parameters
-    const finalTopic = customTopic.trim() || setupData.topic
+    const finalTopic = setupData.mode !== "general" && selectedSubject
+      ? selectedSubject.name
+      : customTopic.trim() || setupData.topic
     const quizParams = new URLSearchParams({
       topic: finalTopic,
       difficulty: setupData.difficulty,
       numQuestions: setupData.numQuestions.toString(),
-      timeLimit: setupData.timeLimit.toString()
+      timeLimit: setupData.timeLimit.toString(),
+      mode: setupData.mode,
     })
+    if (selectedSubjectId) quizParams.set("subjectId", String(selectedSubjectId))
+    if (selectedMaterialId) quizParams.set("materialId", String(selectedMaterialId))
+    if (focusTopics.trim()) quizParams.set("topics", focusTopics.split(",").map((topic) => topic.trim()).filter(Boolean).join(","))
     
     // Navigate to quiz page with parameters
     router.push(`/quiz?${quizParams.toString()}`)
@@ -182,31 +232,12 @@ export default function QuizSetupPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-20">
-      <div className="text-center mb-8">
-        <div className="text-6xl mb-4">🎓</div>
-        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          Create Your Perfect Quiz
-        </h1>
-        <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-          Whether you're in school, college, or university - create personalized quizzes on any educational topic! 
-          From traditional subjects to cutting-edge AI and technology. 🚀
-        </p>
-        <div className="flex justify-center gap-4 mt-4 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-            School Students
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-            College Students
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-            University Students
-          </span>
-        </div>
-      </div>
+    <main className="tayyar-quiz-setup mx-auto max-w-4xl px-4 py-20">
+      <header className="tayyar-quiz-heading">
+        <p className="tayyar-mini-label"><span className="tayyar-live-indicator" /> PERSONALIZED PRACTICE</p>
+        <h1>Build a quiz<br /><span>with a clear focus.</span></h1>
+        <p>Choose a subject, material, or topic and shape a practice session around what you want to strengthen.</p>
+      </header>
 
       <div className="grid gap-8 md:grid-cols-2">
         {/* Topic Selection */}
@@ -218,6 +249,67 @@ export default function QuizSetupPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div>
+              <label htmlFor="quiz-mode" className="mb-2 block text-sm font-medium">Practice mode</label>
+              <select
+                id="quiz-mode"
+                className="w-full rounded-md border bg-background px-3 py-2"
+                value={setupData.mode}
+                onChange={(event) => setSetupData((previous) => ({ ...previous, mode: event.target.value as QuizSetupData["mode"] }))}
+              >
+                <option value="general">General topic quiz</option>
+                <option value="material">Quiz from my material</option>
+                <option value="topic">Topic practice</option>
+                <option value="weak">Weak-topic practice</option>
+                <option value="mistake">Practice my mistakes</option>
+                <option value="exam">Exam preparation</option>
+                <option value="daily">Today&apos;s recommended practice</option>
+              </select>
+              {setupData.mode !== "general" && (
+                <div className="mt-3 space-y-3 rounded-lg bg-muted/40 p-3">
+                  <label htmlFor="subject-select" className="block text-sm font-medium">Subject</label>
+                  <select
+                    id="subject-select"
+                    className="w-full rounded-md border bg-background px-3 py-2"
+                    value={selectedSubjectId || ""}
+                    onChange={(event) => {
+                      const id = Number(event.target.value) || null
+                      setSelectedSubjectId(id)
+                      setSelectedMaterialId(null)
+                      const subject = subjects.find((item) => item.id === id)
+                      if (subject) {
+                        setCustomTopic(subject.name)
+                        setSetupData((previous) => ({ ...previous, topic: subject.name }))
+                      }
+                    }}
+                  >
+                    <option value="">Choose a subject</option>
+                    {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+                  </select>
+                  {selectedSubject && (
+                    <>
+                      <label htmlFor="material-select" className="block text-sm font-medium">Source PDF (optional)</label>
+                      <select
+                        id="material-select"
+                        className="w-full rounded-md border bg-background px-3 py-2"
+                        value={selectedMaterialId || ""}
+                        onChange={(event) => setSelectedMaterialId(Number(event.target.value) || null)}
+                      >
+                        <option value="">All material for {selectedSubject.name}</option>
+                        {selectedSubject.materials.map((material) => (
+                          <option key={material.id} value={material.id}>{material.title}</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                  <label htmlFor="focus-topics" className="block text-sm font-medium">Focus topics (comma-separated, optional)</label>
+                  <Input id="focus-topics" placeholder="e.g. classification, regression" value={focusTopics} onChange={(event) => setFocusTopics(event.target.value)} />
+                  {subjects.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Add a subject and upload a PDF from your dashboard to use personalized modes.</p>
+                  )}
+                </div>
+              )}
+            </div>
             {/* Custom Topic Input */}
             <div>
               <label className="text-sm font-medium mb-2 block">Enter Your Topic</label>

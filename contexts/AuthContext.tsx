@@ -114,7 +114,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Set user data
       setUser(response.user)
       
-      toast.success(`Welcome to Study Mode Agent, ${response.user.full_name}!`)
+      toast.success(`Welcome to Tayyar, ${response.user.full_name}!`)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Signup failed'
       toast.error(errorMessage)
