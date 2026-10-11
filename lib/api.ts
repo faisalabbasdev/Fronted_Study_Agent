@@ -3,6 +3,8 @@
  * Handles all API communication with proper error handling and token management
  */
 
+import { invalidateDashboardSnapshot } from './dashboard-cache'
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cozy-comfort-production.up.railway.app'
 
 export interface User {
@@ -96,12 +98,28 @@ class ApiClient {
         const detail = Array.isArray(errorData.detail)
           ? errorData.detail.map((issue) => issue.msg || "Invalid request").join("; ")
           : errorData.detail
+        if (
+          response.status === 401 &&
+          !endpoint.includes("/auth/login") &&
+          !endpoint.includes("/auth/signup") &&
+          typeof window !== "undefined"
+        ) {
+          tokenManager.removeToken()
+          window.dispatchEvent(new CustomEvent("tayyar:auth-expired"))
+        }
         throw new Error(detail || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      if ((config.method || 'GET').toUpperCase() !== 'GET') {
+        invalidateDashboardSnapshot()
       }
 
       return await response.json()
     } catch (error) {
       if (error instanceof Error) {
+        if (error instanceof TypeError && /fetch|network/i.test(error.message)) {
+          throw new Error(`Could not reach the Tayyar API at ${this.baseURL}. Check that the backend is running and allows this site’s origin.`)
+        }
         throw error
       }
       throw new Error('Network error occurred')
@@ -269,6 +287,14 @@ class ApiClient {
     })
   }
 
+  async getChatSessions(): Promise<any> {
+    return this.request<any>('/api/v1/professional/chat/sessions')
+  }
+
+  async getChatHistory(limit: number = 50): Promise<any> {
+    return this.request<any>(`/api/v1/professional/chat/history?limit=${Math.min(Math.max(limit, 1), 200)}`)
+  }
+
   async getExplanation(data: {
     message: string
     session_id?: string
@@ -410,6 +436,7 @@ class ApiClient {
       const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }))
       throw new Error(errorData.detail || `HTTP ${response.status}`)
     }
+    invalidateDashboardSnapshot()
     return response.json()
   }
 
@@ -493,8 +520,8 @@ class ApiClient {
     return this.request<any>(`/api/v1/api/conversation-memory/sessions/${user_id}?limit=${limit}`)
   }
 
-  async endConversationSession(session_id: string, user_id: number): Promise<any> {
-    return this.request<any>(`/api/v1/api/conversation-memory/session/${session_id}?user_id=${user_id}`, {
+  async endConversationSession(session_id: string): Promise<any> {
+    return this.request<any>(`/api/v1/api/conversation-memory/session/${session_id}`, {
       method: 'DELETE',
     })
   }

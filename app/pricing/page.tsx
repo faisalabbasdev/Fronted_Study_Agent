@@ -1,37 +1,32 @@
 import Link from "next/link"
-import { ArrowRight, BookOpen, CalendarDays, Check, FileText, Target } from "lucide-react"
+import { ArrowRight, BookOpen, Check, Crown, Sparkles, Target } from "lucide-react"
 import SiteFooter from "@/components/site-footer"
 
-const included = [
-  { icon: FileText, label: "Study materials", detail: "PDF notes, books, slides, and past papers" },
-  { icon: BookOpen, label: "Focused practice", detail: "Material, topic, weak-topic, mistake, and exam-style quizzes" },
-  { icon: Target, label: "Progress tools", detail: "Topic history, mistake review, and practice mastery estimates" },
-  { icon: CalendarDays, label: "Study planning", detail: "Daily recommendations, review timing, and subject exam dates" },
+const plans = [
+  { id: "starter", name: "Starter", price: "1,000", icon: BookOpen, description: "Build a steady study routine around your course materials.", features: ["PDF study material library", "Material and topic quizzes", "Quiz explanations and history", "Practice progress overview"] },
+  { id: "plus", name: "Plus", price: "1,500", icon: Target, description: "Turn your results into focused practice for your weak areas.", features: ["Everything in Starter", "Weak-topic practice", "Mistake book and concept review", "Topic mastery estimates", "Daily practice recommendations"], popular: true },
+  { id: "exam-prep", name: "Exam Prep", price: "2,000", icon: Crown, description: "Organize revision around exam dates and past-paper topics.", features: ["Everything in Plus", "Past-paper topic analysis", "Exam-date-aware practice", "Exam-style quiz mode", "Readiness and progress insights"] },
 ]
 
 export default function PricingPage() {
   return <div className="tayyar-marketing-page tayyar-pricing-page">
     <section className="tayyar-pricing-heading">
-      <p className="tayyar-mini-label"><span className="tayyar-live-indicator" /> TAYYAR STUDY WORKSPACE</p>
-      <h1>One workspace.<br /><span>What’s included.</span></h1>
-      <p>See what’s included in Tayyar today. This project has no paid tiers or billing configured, so the page shows the current workspace without made-up prices.</p>
+      <p className="tayyar-mini-label"><span className="tayyar-live-indicator" /> SIMPLE STUDENT PLANS</p>
+      <h1>Choose your<br /><span>study pace.</span></h1>
+      <p>Three monthly packages in Pakistani rupees, designed around how much structure and exam practice you need.</p>
     </section>
-    <section className="tayyar-pricing-cards" aria-label="Current Tayyar workspace">
-      <article className="tayyar-pricing-card is-featured">
-        <span className="tayyar-pricing-popular">CURRENT WORKSPACE</span>
-        <div className="tayyar-pricing-kicker"><span /> ONE STUDY SPACE</div>
-        <div className="tayyar-pricing-body">
-          <div className="tayyar-pricing-summary">
-            <div className="tayyar-pricing-icon"><BookOpen /></div>
-            <h2>Everything for focused exam preparation.</h2>
-            <p className="tayyar-pricing-description">Use your course materials, practice what needs work, and keep your progress together in one student workspace.</p>
-            <div className="tayyar-pricing-included"><strong>Billing not configured</strong><span>All features currently available are part of this workspace.</span></div>
-            <Link href="/signup" className="tayyar-pricing-cta is-bright">Create your study space <ArrowRight /></Link>
-          </div>
-          <ul className="tayyar-pricing-included-list">{included.map(({ icon: Icon, label, detail }) => <li key={label}><span className="tayyar-pricing-list-icon"><Icon /></span><span><strong>{label}</strong><small>{detail}</small></span><Check className="tayyar-pricing-list-check" /></li>)}</ul>
-        </div>
-      </article>
+    <section className="tayyar-pricing-cards tayyar-plan-cards" aria-label="Monthly Tayyar plans">
+      {plans.map(({ id, name, price, icon: Icon, description, features, popular }) => <article key={id} className={`tayyar-pricing-card tayyar-plan-card ${popular ? "is-featured" : ""}`}>
+        {popular && <span className="tayyar-pricing-popular">MOST POPULAR</span>}
+        <div className="tayyar-pricing-kicker"><span />{name.toUpperCase()}</div>
+        <div className="tayyar-pricing-icon"><Icon /></div>
+        <h2>{name}</h2><p className="tayyar-pricing-description">{description}</p>
+        <div className="tayyar-plan-price"><strong>Rs {price}</strong><span>PKR / month</span></div>
+        <ul>{features.map((feature) => <li key={feature}><Check />{feature}</li>)}</ul>
+        <Link href="/signup" className={`tayyar-pricing-cta ${popular ? "is-bright" : ""}`}>Get started <ArrowRight /></Link>
+      </article>)}
     </section>
+    <p className="tayyar-pricing-disclaimer"><Sparkles /> Plan prices are shown as requested. Online payments and plan-based access controls are not connected in the current app yet.</p>
     <SiteFooter />
   </div>
 }

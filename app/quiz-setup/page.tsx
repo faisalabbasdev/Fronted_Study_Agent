@@ -95,11 +95,9 @@ export default function QuizSetupPage() {
   const [selectedMaterialId, setSelectedMaterialId] = useState<number | null>(null)
   const [focusTopics, setFocusTopics] = useState('')
 
-  // Redirect if not authenticated
-  if (!isLoading && !isAuthenticated) {
-    router.push("/login")
-    return null
-  }
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) router.replace("/login")
+  }, [isAuthenticated, isLoading, router])
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -186,9 +184,8 @@ export default function QuizSetupPage() {
     setIsGenerating(true)
     
     // Prepare quiz parameters
-    const finalTopic = setupData.mode !== "general" && selectedSubject
-      ? selectedSubject.name
-      : customTopic.trim() || setupData.topic
+    const requestedFocusTopic = customTopic.trim() || setupData.topic.trim()
+    const finalTopic = selectedSubject?.name || requestedFocusTopic
     const quizParams = new URLSearchParams({
       topic: finalTopic,
       difficulty: setupData.difficulty,
@@ -199,6 +196,7 @@ export default function QuizSetupPage() {
     if (selectedSubjectId) quizParams.set("subjectId", String(selectedSubjectId))
     if (selectedMaterialId) quizParams.set("materialId", String(selectedMaterialId))
     if (focusTopics.trim()) quizParams.set("topics", focusTopics.split(",").map((topic) => topic.trim()).filter(Boolean).join(","))
+    else if (setupData.mode === "general" && selectedSubject && requestedFocusTopic.toLocaleLowerCase() !== selectedSubject.name.toLocaleLowerCase()) quizParams.set("topics", requestedFocusTopic)
     
     // Navigate to quiz page with parameters
     router.push(`/quiz?${quizParams.toString()}`)
@@ -219,7 +217,7 @@ export default function QuizSetupPage() {
     }))
   }
 
-  if (isLoading) {
+  if (isLoading || !isAuthenticated) {
     return (
       <main className="mx-auto grid min-h-[calc(100vh-4rem)] place-items-center px-4">
         <StudyLoader 
@@ -265,9 +263,9 @@ export default function QuizSetupPage() {
                 <option value="exam">Exam preparation</option>
                 <option value="daily">Today&apos;s recommended practice</option>
               </select>
-              {setupData.mode !== "general" && (
-                <div className="mt-3 space-y-3 rounded-lg bg-muted/40 p-3">
+              <div className="mt-3 space-y-3 rounded-lg bg-muted/40 p-3">
                   <label htmlFor="subject-select" className="block text-sm font-medium">Subject</label>
+                  <p className="-mt-2 text-xs text-muted-foreground">Choose a saved course to attach this quiz to your progress and recommendations.</p>
                   <select
                     id="subject-select"
                     className="w-full rounded-md border bg-background px-3 py-2"
@@ -286,29 +284,33 @@ export default function QuizSetupPage() {
                     <option value="">Choose a subject</option>
                     {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
                   </select>
+                  {setupData.mode === "general" && selectedSubject && customTopic.trim() && customTopic.trim().toLocaleLowerCase() !== selectedSubject.name.toLocaleLowerCase() && <p className="text-xs text-muted-foreground">Quiz focus: {customTopic.trim()} · Saved under {selectedSubject.name}</p>}
                   {selectedSubject && (
                     <>
-                      <label htmlFor="material-select" className="block text-sm font-medium">Source PDF (optional)</label>
-                      <select
-                        id="material-select"
-                        className="w-full rounded-md border bg-background px-3 py-2"
-                        value={selectedMaterialId || ""}
-                        onChange={(event) => setSelectedMaterialId(Number(event.target.value) || null)}
-                      >
-                        <option value="">All material for {selectedSubject.name}</option>
-                        {selectedSubject.materials.map((material) => (
-                          <option key={material.id} value={material.id}>{material.title}</option>
-                        ))}
-                      </select>
+                      {setupData.mode !== "general" && <>
+                        <label htmlFor="material-select" className="block text-sm font-medium">Source PDF (optional)</label>
+                        <select
+                          id="material-select"
+                          className="w-full rounded-md border bg-background px-3 py-2"
+                          value={selectedMaterialId || ""}
+                          onChange={(event) => setSelectedMaterialId(Number(event.target.value) || null)}
+                        >
+                          <option value="">All material for {selectedSubject.name}</option>
+                          {selectedSubject.materials.map((material) => (
+                            <option key={material.id} value={material.id}>{material.title}</option>
+                          ))}
+                        </select>
+                      </>}
                     </>
                   )}
-                  <label htmlFor="focus-topics" className="block text-sm font-medium">Focus topics (comma-separated, optional)</label>
-                  <Input id="focus-topics" placeholder="e.g. classification, regression" value={focusTopics} onChange={(event) => setFocusTopics(event.target.value)} />
+                  {setupData.mode !== "general" && <>
+                    <label htmlFor="focus-topics" className="block text-sm font-medium">Focus topics (comma-separated, optional)</label>
+                    <Input id="focus-topics" placeholder="e.g. classification, regression" value={focusTopics} onChange={(event) => setFocusTopics(event.target.value)} />
+                  </>}
                   {subjects.length === 0 && (
-                    <p className="text-xs text-muted-foreground">Add a subject and upload a PDF from your dashboard to use personalized modes.</p>
+                    <p className="text-xs text-muted-foreground">Add a subject to save quiz progress to a course. Upload a PDF to unlock source-grounded personalized modes.</p>
                   )}
-                </div>
-              )}
+              </div>
             </div>
             {/* Custom Topic Input */}
             <div>
@@ -481,7 +483,7 @@ export default function QuizSetupPage() {
 
       {/* Features Preview */}
       <div className="mt-12">
-        <h2 className="text-xl font-semibold mb-6 text-center">What You'll Get 🎁</h2>
+        <h2 className="text-xl font-semibold mb-6 text-center">What You Will Get 🎁</h2>
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="text-center">
             <CardContent className="p-6">

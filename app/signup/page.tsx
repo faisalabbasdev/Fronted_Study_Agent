@@ -13,6 +13,7 @@ import { Progress } from "@/components/ui/progress"
 import Link from "next/link"
 import { apiClient } from "@/lib/api"
 import ThemeToggle from "@/components/theme-toggle"
+import BrandLogo from "@/components/brand-logo"
 
 type OnboardingAnswers = { step: number; name: string; studyContext: string; university: string; program: string; semester: string; source: string }
 const onboardingKey = "tayyar-onboarding-draft"
@@ -154,7 +155,7 @@ export default function SignupPage() {
       <div className="tayyar-onboarding-glow" />
       <div className="tayyar-onboarding-wrap">
         <div className="tayyar-auth-theme-toggle"><ThemeToggle /></div>
-        <Link href="/" className="tayyar-onboarding-brand"><span className="tayyar-brand-glyph">T</span><span className="tayyar-brand-copy"><strong>Tayyar</strong><small>AI EXAM PREPARATION</small></span></Link>
+        <Link href="/" className="tayyar-onboarding-brand" aria-label="Tayyar home"><BrandLogo className="h-20 w-56 object-contain" priority /></Link>
         <div className="tayyar-onboarding-progress" aria-label={`Question ${onboarding.step} of 3`}>{[1, 2, 3].map((step) => <span key={step} className={step < onboarding.step ? "is-done" : step === onboarding.step ? "is-current" : ""}>{step < onboarding.step ? <Check /> : step}</span>)}</div>
         <section className="tayyar-onboarding-card" aria-live="polite">
           <p className="tayyar-mini-label">LET’S SET UP YOUR STUDY SPACE · {String(onboarding.step).padStart(2, "0")} / 03</p>
@@ -531,7 +532,7 @@ export default function SignupPage() {
 
       <aside className="tayyar-login-side">
         <div className="tayyar-login-side-content">
-          <Link href="/" className="tayyar-auth-side-brand"><span className="tayyar-brand-glyph">T</span><span className="tayyar-brand-copy"><strong>Tayyar</strong><small>AI EXAM PREPARATION</small></span></Link>
+          <Link href="/" className="tayyar-auth-side-brand" aria-label="Tayyar home"><BrandLogo className="h-16 w-48 object-contain" priority /></Link>
           <p className="tayyar-auth-side-pill"><BookOpen /> A STUDY PLAN THAT STARTS WITH YOU</p>
           <h2>Make your study time<br /><span>count for more.</span></h2>
           <p className="tayyar-login-side-lede">Build a study space around your subjects, course material, and the topics you want to strengthen.</p>

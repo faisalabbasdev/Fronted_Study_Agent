@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { apiClient, tokenManager, User, SignupData, LoginData, AuthResponse } from '@/lib/api'
+import { clearDashboardSnapshot } from '@/lib/dashboard-cache'
 import toast from 'react-hot-toast'
 import { useReminderToast } from '@/components/ui/reminder-toast'
 
@@ -36,6 +37,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const isAuthenticated = !!user
 
+  useEffect(() => {
+    let notified = false
+    const handleExpiredSession = () => {
+      tokenManager.removeToken()
+      clearDashboardSnapshot()
+      setUser(null)
+      setIsLoading(false)
+      if (!notified) {
+        notified = true
+        toast.error("Your session expired. Please sign in again.")
+      }
+    }
+    window.addEventListener("tayyar:auth-expired", handleExpiredSession)
+    return () => window.removeEventListener("tayyar:auth-expired", handleExpiredSession)
+  }, [])
+
   // Function to show personalized reminder toast
   const showPersonalizedReminder = async () => {
     try {
@@ -65,8 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           const userData = await apiClient.getCurrentUser()
           setUser(userData)
-          // Show personalized reminder after successful login
-          await showPersonalizedReminder()
+          void showPersonalizedReminder()
         } catch (error) {
           // Token is invalid, remove it
           tokenManager.removeToken()
@@ -92,8 +108,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       toast.success(`Welcome back, ${response.user.full_name}!`)
       
-      // Show personalized reminder toast after successful login
-      await showPersonalizedReminder()
+      void showPersonalizedReminder()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed'
       toast.error(errorMessage)
@@ -126,6 +141,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = () => {
     tokenManager.removeToken()
+    clearDashboardSnapshot()
     setUser(null)
     toast.success('Logged out successfully')
   }

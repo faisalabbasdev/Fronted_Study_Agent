@@ -6,9 +6,11 @@ import { useEffect, useState } from "react"
 import { LogOut, Menu, X } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import ThemeToggle from "./theme-toggle"
+import BrandLogo from "./brand-logo"
 
 const links = [
   { href: "/about", label: "How it works" },
+  { href: "/universities", label: "Universities" },
   { href: "/pricing", label: "Pricing" },
   { href: "/faq", label: "FAQ" },
 ]
@@ -26,14 +28,13 @@ export default function SiteHeader() {
     return () => window.removeEventListener("scroll", updateScrollState)
   }, [])
 
-  if (["/login", "/signup", "/dashboard"].includes(pathname)) return null
+  if (["/login", "/signup", "/chat"].includes(pathname) || pathname.startsWith("/dashboard")) return null
 
   return (
     <header className={`tayyar-site-header ${isScrolled ? "is-scrolled" : ""}`}>
       <div className="tayyar-nav-pill">
         <Link href="/" className="tayyar-brand" aria-label="Tayyar home">
-          <span className="tayyar-brand-glyph">T</span>
-          <span className="tayyar-brand-copy"><strong>Tayyar</strong><small>AI EXAM PREPARATION</small></span>
+          <BrandLogo className="h-12 w-36 object-contain sm:w-44" priority />
         </Link>
         <nav className="tayyar-desktop-links" aria-label="Main navigation">
           {links.map(({ href, label }) => <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}>{label}</Link>)}

@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { ArrowRight, BookOpen, Brain, CalendarDays, Check, FileText, Target, UploadCloud } from "lucide-react"
+import BrandLogo from "@/components/brand-logo"
 
 const principles = [
   { icon: UploadCloud, number: "01", title: "Start with your material", body: "Upload lecture notes, books, slides, or past papers as PDFs and attach them to a subject." },
@@ -11,7 +12,7 @@ const principles = [
 export default function AboutPage() {
   return <main className="tayyar-marketing-page tayyar-subpage">
     <section className="tayyar-subpage-hero">
-      <p className="tayyar-mini-label"><span className="tayyar-live-indicator" /> THE TAYYAR STUDY LOOP</p>
+      <p className="tayyar-mini-label"><span className="tayyar-live-indicator" /> THE Tayyar STUDY LOOP</p>
       <h1>Less random practice.<br /><span>More useful revision.</span></h1>
       <p className="tayyar-subpage-lede">Tayyar connects your course PDFs, quiz history, and weak topics—so every practice session can help you decide what to study next.</p>
       <div className="tayyar-hero-buttons"><Link href="/signup" className="tayyar-button-light">Build your study space <ArrowRight /></Link><Link href="/pricing" className="tayyar-button-outline">Explore Tayyar</Link></div>
@@ -25,6 +26,6 @@ export default function AboutPage() {
       <div className="tayyar-about-source"><FileText /><p><strong>Source-grounded by design</strong><span>Material-based questions can show the document and page they came from, so you can return to your own notes.</span></p></div>
     </section>
     <section className="tayyar-final-cta"><div><p className="tayyar-mini-label">YOUR COURSEWORK, IN ONE STUDY LOOP</p><h2>Ready to choose what you<br /><span>study next?</span></h2><p>Start with one subject and a course PDF.</p></div><Link href="/signup" className="tayyar-button-light">Get started <ArrowRight /></Link></section>
-    <footer className="tayyar-footer"><div className="tayyar-footer-main"><div><Link href="/" className="tayyar-brand"><span className="tayyar-brand-glyph">T</span><span className="tayyar-brand-copy"><strong>Tayyar</strong><small>AI EXAM PREPARATION</small></span></Link><p>Study from your own materials.<br />Know what to practice next.</p></div><div><p className="tayyar-mini-label">PRODUCT</p><Link href="/">Home</Link><Link href="/pricing">Pricing</Link><Link href="/faq">FAQ</Link></div><div><p className="tayyar-mini-label">YOUR SPACE</p><Link href="/signup">Create account</Link><Link href="/login">Sign in</Link><Link href="/dashboard">Dashboard</Link></div></div><div className="tayyar-footer-bottom"><span>© 2026 Tayyar · AI Exam Preparation</span><span>Practice readiness is an estimate, not an exam mark prediction.</span></div></footer>
+    <footer className="tayyar-footer"><div className="tayyar-footer-main"><div><Link href="/" className="tayyar-brand" aria-label="Tayyar home"><BrandLogo className="h-16 w-48 object-contain" /></Link><p>Study from your own materials.<br />Know what to practice next.</p></div><div><p className="tayyar-mini-label">PRODUCT</p><Link href="/">Home</Link><Link href="/pricing">Pricing</Link><Link href="/faq">FAQ</Link></div><div><p className="tayyar-mini-label">YOUR SPACE</p><Link href="/signup">Create account</Link><Link href="/login">Sign in</Link><Link href="/dashboard">Dashboard</Link></div></div><div className="tayyar-footer-bottom"><span>© 2026 Tayyar · AI Exam Preparation</span><span>Practice readiness is an estimate, not an exam mark prediction.</span></div></footer>
   </main>
 }

@@ -2,16 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Activity, ArrowRight, BookOpen, Brain, CalendarDays, ChartNoAxesCombined, Clock3, FileText, Flame, GraduationCap, LayoutDashboard, Loader2, LogOut, Menu, Plus, Sparkles, Target, TrendingUp, UploadCloud, X } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, StudentSubject } from "@/lib/api"
+import { getDashboardSnapshot, setDashboardSnapshot } from "@/lib/dashboard-cache"
 import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { StudyLoader } from "@/components/ui/study-loader"
 import ThemeToggle from "@/components/theme-toggle"
+import BrandLogo from "@/components/brand-logo"
 
 type Mistake = {
   question_id: string; question: string; topic: string; subject: string; subject_id?: number
@@ -25,75 +27,78 @@ type MaterialType = "lecture" | "book" | "slides" | "past_paper"
 export default function DashboardPage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth()
   const router = useRouter()
-  const [overview, setOverview] = useState<any>(null)
-  const [mistakes, setMistakes] = useState<Mistake[]>([])
-  const [recentQuizzes, setRecentQuizzes] = useState<any[]>([])
-  const [recentSessions, setRecentSessions] = useState<any[]>([])
+  const pathname = usePathname()
+  const cachedDashboard = user ? getDashboardSnapshot(user.id) : null
+  const [overview, setOverview] = useState<any>(cachedDashboard?.snapshot.overview ?? null)
+  const [mistakes, setMistakes] = useState<Mistake[]>(cachedDashboard?.snapshot.mistakes ?? [])
+  const [recentQuizzes, setRecentQuizzes] = useState<any[]>(cachedDashboard?.snapshot.recentQuizzes ?? [])
+  const [recentSessions, setRecentSessions] = useState<any[]>(cachedDashboard?.snapshot.recentSessions ?? [])
   const [selectedQuiz, setSelectedQuiz] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(!cachedDashboard)
   const [uploading, setUploading] = useState<number | null>(null)
   const [analyzing, setAnalyzing] = useState<number | null>(null)
   const [error, setError] = useState("")
-  const [showSubjectForm, setShowSubjectForm] = useState(false)
-  const [activeSection, setActiveSection] = useState("overview")
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [materialType, setMaterialType] = useState<MaterialType>("lecture")
-  const [draft, setDraft] = useState({ name: "", university: "", program: "", semester: "", exam_date: "" })
 
   const refresh = useCallback(async () => {
+    if (!user) return
+
     try {
-      const [nextOverview, nextMistakes, quizHistory, sessions] = await Promise.allSettled([
-        apiClient.getLearningOverview(), apiClient.getMistakes(), apiClient.getQuizHistory(5), apiClient.getStudySessions({ limit: 5 }),
+      const nextOverview = await apiClient.getLearningOverview()
+      const nextMistakes = nextOverview.mistakes || []
+      const previousDashboard = getDashboardSnapshot(user.id)?.snapshot
+      setOverview(nextOverview)
+      setMistakes(nextMistakes)
+      setLoading(false)
+      setDashboardSnapshot(user.id, {
+        overview: nextOverview,
+        mistakes: nextMistakes,
+        recentQuizzes: previousDashboard?.recentQuizzes ?? [],
+        recentSessions: previousDashboard?.recentSessions ?? [],
+      })
+
+      const [quizHistory, sessions] = await Promise.allSettled([
+        apiClient.getQuizHistory(5),
+        apiClient.getStudySessions({ limit: 5 }),
       ])
-      if (nextOverview.status === "rejected") throw nextOverview.reason
-      if (nextMistakes.status === "rejected") throw nextMistakes.reason
-      setOverview(nextOverview.value)
-      setMistakes(nextMistakes.value.mistakes || [])
-      setRecentQuizzes(quizHistory.status === "fulfilled" ? quizHistory.value?.quizzes || [] : [])
-      setRecentSessions(sessions.status === "fulfilled" && Array.isArray(sessions.value) ? sessions.value : [])
-      setError("")
+      const nextQuizzes = quizHistory.status === "fulfilled"
+        ? quizHistory.value?.quizzes || []
+        : previousDashboard?.recentQuizzes ?? []
+      const nextSessions = sessions.status === "fulfilled" && Array.isArray(sessions.value)
+        ? sessions.value
+        : previousDashboard?.recentSessions ?? []
+      setRecentQuizzes(nextQuizzes)
+      setRecentSessions(nextSessions)
+      setDashboardSnapshot(user.id, {
+        overview: nextOverview,
+        mistakes: nextMistakes,
+        recentQuizzes: nextQuizzes,
+        recentSessions: nextSessions,
+      })
+      const hasPartialFailure = [quizHistory, sessions].some((result) => result.status === "rejected")
+      setError(hasPartialFailure ? "Some history details could not be loaded. Your subject progress is available below." : "")
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load your learning data")
-    } finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.replace("/login")
-    if (isAuthenticated) void refresh()
-  }, [isAuthenticated, isLoading, refresh, router])
-
-  useEffect(() => {
-    const profile = user?.preferences?.onboarding
-    if (!profile) return
-    setDraft((current) => ({
-      ...current,
-      university: current.university || profile.university || "",
-      program: current.program || profile.program || "",
-      semester: current.semester || profile.semester || "",
-    }))
+    } finally {
+      setLoading(false)
+    }
   }, [user])
 
   useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
-      if (visible) setActiveSection(visible.target.id)
-    }, { rootMargin: "-18% 0px -68% 0px", threshold: [0, 0.15, 0.35, 0.6] })
-    const sections = ["overview", "subjects", "weak-topics", "mistakes", "progress", "activity"]
-      .map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[]
-    sections.forEach((section) => observer.observe(section))
-    return () => observer.disconnect()
-  }, [])
-
-  const addSubject = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setSaving(true); setError("")
-    try {
-      await apiClient.createLearningSubject(draft)
-      setDraft({ name: "", university: "", program: "", semester: "", exam_date: "" })
-      setShowSubjectForm(false); await refresh()
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not add this subject") }
-    finally { setSaving(false) }
-  }
+    if (!isLoading && !isAuthenticated) router.replace("/login")
+    if (isAuthenticated && user) {
+      const cached = getDashboardSnapshot(user.id)
+      if (cached) {
+        setOverview(cached.snapshot.overview)
+        setMistakes(cached.snapshot.mistakes)
+        setRecentQuizzes(cached.snapshot.recentQuizzes)
+        setRecentSessions(cached.snapshot.recentSessions)
+        setLoading(false)
+      }
+      if (!cached?.isFresh) void refresh()
+    }
+  }, [isAuthenticated, isLoading, refresh, router, user])
 
   const upload = async (subjectId: number, file?: File) => {
     if (!file) return
@@ -146,10 +151,17 @@ export default function DashboardPage() {
     { id: "progress", label: "Progress", icon: ChartNoAxesCombined },
     { id: "activity", label: "Recent activity", icon: Activity },
   ]
-  const jumpToSection = (id: string) => {
-    setActiveSection(id)
-    setMobileNavOpen(false)
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+  const requestedSection = pathname.split("/").filter(Boolean).pop() || "overview"
+  const activeSection = sectionLinks.some((section) => section.id === requestedSection) ? requestedSection : "overview"
+  const pageTitle = sectionLinks.find((section) => section.id === activeSection)?.label || "Overview"
+  const sectionHref = (id: string) => id === "overview" ? "/dashboard" : `/dashboard/${id}`
+  const sectionDescription: Record<string, string> = {
+    overview: "Your study plan, progress, and next steps—all in one place.",
+    subjects: "Manage each course, exam date, and the PDFs that ground your practice.",
+    "weak-topics": "See the course concepts that deserve your next focused practice session.",
+    mistakes: "Review previous misses and practice the idea behind each mistake.",
+    progress: "Follow your practice mastery estimates and topic improvement over time.",
+    activity: "Review completed quizzes and study sessions from your recent history.",
   }
 
   return (
@@ -157,12 +169,14 @@ export default function DashboardPage() {
       <div className="tayyar-dashboard-shell mx-auto grid w-full max-w-[1660px] gap-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-0">
       <aside className="tayyar-sidebar hidden lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col" aria-label="Dashboard sidebar">
         <Link href="/dashboard" className="tayyar-sidebar-brand">
-          <span className="tayyar-brand-mark">T</span><span className="min-w-0"><strong>Tayyar</strong><small>STUDENT WORKSPACE</small></span>
+          <BrandLogo className="h-16 w-48 object-contain" priority />
         </Link>
+        <div className="tayyar-platform-switch"><Link href="/dashboard" className="is-active">Platform</Link><Link href="/chat">Chat</Link></div>
         <div className="tayyar-sidebar-context"><span className="tayyar-context-icon"><GraduationCap className="h-4 w-4" /></span><span className="min-w-0"><strong>My learning</strong><small>{subjects.length ? `${subjects.length} active ${subjects.length === 1 ? "subject" : "subjects"}` : "Start with a subject"}</small></span></div>
         <p className="tayyar-sidebar-label">STUDY SPACE</p>
         <nav className="tayyar-sidebar-nav" aria-label="Study space">
-          {sectionLinks.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-current={activeSection === id ? "page" : undefined} onClick={() => jumpToSection(id)} className={`tayyar-sidebar-link ${activeSection === id ? "is-active" : ""}`}><Icon className="h-[17px] w-[17px]" /><span>{label}</span>{activeSection === id && <span className="tayyar-sidebar-indicator" />}</button>)}
+          {sectionLinks.map(({ id, label, icon: Icon }) => <Link key={id} href={sectionHref(id)} aria-current={activeSection === id ? "page" : undefined} className={`tayyar-sidebar-link ${activeSection === id ? "is-active" : ""}`}><Icon className="h-[17px] w-[17px]" /><span>{label}</span>{activeSection === id && <span className="tayyar-sidebar-indicator" />}</Link>)}
+          <Link href="/universities" className="tayyar-sidebar-link"><GraduationCap className="h-[17px] w-[17px]" /><span>Universities</span><ArrowRight className="ml-auto h-3.5 w-3.5 opacity-50" /></Link>
         </nav>
         <p className="tayyar-sidebar-label mt-7">PRACTICE</p>
         <nav className="tayyar-sidebar-nav" aria-label="Practice tools">
@@ -177,37 +191,27 @@ export default function DashboardPage() {
 
       <div className="tayyar-dashboard-content min-w-0">
       <nav className="tayyar-mobile-nav lg:hidden" aria-label="Dashboard sections">
-        <div className="flex items-center gap-2"><span className="tayyar-brand-mark h-9 w-9 text-sm">T</span><span className="font-semibold">Tayyar</span></div>
+        <BrandLogo className="h-11 w-36 object-contain" priority />
         <button type="button" aria-expanded={mobileNavOpen} aria-label="Toggle dashboard navigation" className="tayyar-mobile-menu-button" onClick={() => setMobileNavOpen((open) => !open)}><Menu className="h-4 w-4" />Sections</button>
         <button type="button" className="tayyar-mobile-logout" onClick={logout} aria-label="Sign out"><LogOut className="h-4 w-4" /></button>
-        {mobileNavOpen && <div className="tayyar-mobile-nav-panel">{sectionLinks.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => jumpToSection(id)} className={activeSection === id ? "is-active" : ""}><Icon className="h-4 w-4" />{label}</button>)}<Link href="/quiz-setup"><Target className="h-4 w-4" />Build a quiz</Link><Link href="/study-modes"><Brain className="h-4 w-4" />Study modes</Link></div>}
+        {mobileNavOpen && <div className="tayyar-mobile-nav-panel"><Link href="/dashboard" onClick={() => setMobileNavOpen(false)} className={activeSection === "overview" ? "is-active" : ""}><LayoutDashboard className="h-4 w-4" />Platform</Link><Link href="/chat" onClick={() => setMobileNavOpen(false)}><Brain className="h-4 w-4" />Chat</Link>{sectionLinks.slice(1).map(({ id, label, icon: Icon }) => <Link key={id} href={sectionHref(id)} onClick={() => setMobileNavOpen(false)} className={activeSection === id ? "is-active" : ""}><Icon className="h-4 w-4" />{label}</Link>)}<Link href="/universities" onClick={() => setMobileNavOpen(false)}><GraduationCap className="h-4 w-4" />Universities</Link><Link href="/quiz-setup" onClick={() => setMobileNavOpen(false)}><Target className="h-4 w-4" />Build a quiz</Link><Link href="/study-modes" onClick={() => setMobileNavOpen(false)}><Brain className="h-4 w-4" />Study modes</Link></div>}
       </nav>
 
-      <header id="overview" className="tayyar-dashboard-header scroll-mt-24 flex flex-wrap items-center justify-between gap-4">
+      <header className="tayyar-dashboard-header flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="tayyar-eyebrow">YOUR STUDY SPACE <span className="tayyar-live-dot" /></p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">Good to see you, {displayName}.</h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">Your study plan, progress, and next steps—all in one place.</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">{activeSection === "overview" ? `Good to see you, ${displayName}.` : pageTitle}</h1>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">{sectionDescription[activeSection]}</p>
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <Button variant="outline" className="tayyar-outline-button" onClick={() => setShowSubjectForm((open) => !open)}><Plus className="mr-2 h-4 w-4" />Add subject</Button>
+          <Button asChild variant="outline" className="tayyar-outline-button"><Link href="/dashboard/new-subject"><Plus className="mr-2 h-4 w-4" />Add subject</Link></Button>
         </div>
       </header>
 
       {error && <div role="alert" className="mt-5 flex items-center justify-between rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive"><span>{error}</span><button aria-label="Dismiss error" onClick={() => setError("")}><X className="h-4 w-4" /></button></div>}
 
-      {showSubjectForm && <section className="tayyar-panel mt-7 p-5 sm:p-6"><div className="mb-4 flex items-start justify-between"><div><p className="text-sm font-semibold">Set up a subject</p><p className="mt-1 text-sm text-muted-foreground">Use the academic details that fit your university or program.</p></div><button aria-label="Close form" onClick={() => setShowSubjectForm(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div>
-        <form onSubmit={addSubject} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Input required aria-label="Subject name" placeholder="Subject name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          <Input aria-label="University" placeholder="University (optional)" value={draft.university} onChange={(e) => setDraft({ ...draft, university: e.target.value })} />
-          <Input aria-label="Program" placeholder="Program (optional)" value={draft.program} onChange={(e) => setDraft({ ...draft, program: e.target.value })} />
-          <Input aria-label="Semester" placeholder="Semester (optional)" value={draft.semester} onChange={(e) => setDraft({ ...draft, semester: e.target.value })} />
-          <div className="flex gap-2"><Input aria-label="Exam date" type="date" value={draft.exam_date} onChange={(e) => setDraft({ ...draft, exam_date: e.target.value })} /><Button type="submit" disabled={saving} className="shrink-0">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}</Button></div>
-        </form>
-      </section>}
-
-      <section className="tayyar-hero mt-8 overflow-hidden rounded-[28px] p-6 sm:p-9 lg:p-10">
+      {activeSection === "overview" && <section className="tayyar-hero mt-8 overflow-hidden rounded-[28px] p-6 sm:p-9 lg:p-10">
         <div className="relative z-10 grid gap-8 lg:grid-cols-[1.15fr_.85fr] lg:items-center">
           <div><div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/85"><Sparkles className="h-3.5 w-3.5 text-lime-300" /> PERSONALIZED FOR YOUR PROGRESS</div>
             <h2 className="mt-5 max-w-xl text-3xl font-semibold leading-tight tracking-[-0.04em] text-white sm:text-4xl">Make your next study session count.</h2>
@@ -224,40 +228,86 @@ export default function DashboardPage() {
             <Metric label="Learning streak" value={`${overview?.current_streak ?? 0}`} detail="Consecutive active days" icon={<Flame />} />
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section id="subjects" className="mt-10 scroll-mt-24">
+      {(activeSection === "subjects" || activeSection === "overview") && <section className="mt-10">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="tayyar-eyebrow">YOUR COURSEWORK</p><h2 className="mt-1 text-xl font-semibold tracking-tight">Subjects</h2></div><span className="text-sm text-muted-foreground">{subjects.length} {subjects.length === 1 ? "subject" : "subjects"}</span></div>
         {subjects.length ? <div className="grid gap-4 xl:grid-cols-2">{subjects.map((subject) => <SubjectCard key={subject.id} subject={subject} materialType={materialType} setMaterialType={setMaterialType} uploading={uploading === subject.id} analyzingMaterialId={analyzing}
           onUpload={(file) => void upload(subject.id, file)} onExamDate={(value) => void updateExamDate(subject.id, value)}
           onAnalyze={async (id) => { setAnalyzing(id); try { await apiClient.analyzePastPaper(id); await refresh() } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not analyze the past paper") } finally { setAnalyzing(null) }} }
           onOpen={async (id, page) => { try { await apiClient.openMaterialSource(id, page) } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not open the PDF") } }}
           onPractice={(mode, topic, materialId) => practice(subject, mode, topic, materialId)} />)}</div>
-          : <div className="tayyar-panel grid gap-5 p-7 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-base font-semibold">Your courses start here</p><p className="mt-1 max-w-lg text-sm leading-6 text-muted-foreground">Add a subject, then attach lecture notes, slides, books, or past papers as PDFs to create source-grounded practice.</p></div><Button onClick={() => setShowSubjectForm(true)}><Plus className="mr-2 h-4 w-4" />Add your first subject</Button></div>}
-      </section>
+          : <div className="tayyar-panel grid gap-5 p-7 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-base font-semibold">Your courses start here</p><p className="mt-1 max-w-lg text-sm leading-6 text-muted-foreground">Add a subject, then attach lecture notes, slides, books, or past papers as PDFs to create source-grounded practice.</p></div><Button asChild><Link href="/dashboard/new-subject"><Plus className="mr-2 h-4 w-4" />Add your first subject</Link></Button></div>}
+      </section>}
 
-      <section id="weak-topics" className="mt-10 scroll-mt-24 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
-        <div className="tayyar-panel p-5 sm:p-6"><div className="flex items-start justify-between gap-4"><div><p className="tayyar-eyebrow">FOCUS NEXT</p><h2 className="mt-1 text-lg font-semibold">Topics to strengthen</h2></div><div className="tayyar-icon-tile"><Target className="h-5 w-5" /></div></div>
-          {(overview?.weak_topics || []).length ? <div className="mt-5 space-y-4">{overview.weak_topics.slice(0, 5).map((topic: any) => { const subject = subjects.find((item) => item.topic_performance.some((entry) => entry.topic === topic.topic)); return <div key={`${subject?.id}-${topic.topic}`}><div className="mb-1.5 flex items-center justify-between gap-3"><div><span className="text-sm font-medium">{topic.topic}</span><span className="ml-2 text-xs text-muted-foreground">{subject?.name}</span></div><span className="text-sm font-semibold tabular-nums">{topic.mastery}%</span></div><Progress value={topic.mastery} className="h-2" /><div className="mt-2 flex justify-end"><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => subject && practice(subject, "topic", topic.topic)}>Practice topic <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Button></div></div>})}</div>
+      {activeSection === "overview" && subjects.length > 0 && <section className="mt-8">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div><p className="tayyar-eyebrow">YOUR NEXT FOCUS</p><h2 className="mt-1 text-xl font-semibold tracking-tight">What needs practice</h2><p className="mt-1 text-sm text-muted-foreground">Based on recent answers and review timing.</p></div>
+          <Link href="/dashboard/weak-topics" className="text-sm font-medium text-primary hover:underline">All focus topics <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></Link>
+        </div>
+        {(overview?.weak_topics || []).length ? <div className="tayyar-overview-focus-grid">{overview.weak_topics.slice(0, 3).map((topic: any) => {
+          const subject = subjects.find((item) => item.id === topic.subject_id) || subjects.find((item) => item.topic_performance.some((entry) => entry.topic === topic.topic))
+          const daysSince = topic.last_practiced ? Math.max(0, Math.floor((Date.now() - new Date(topic.last_practiced).getTime()) / 86_400_000)) : null
+          return <article key={`${topic.subject_id}-${topic.topic}`} className="tayyar-overview-focus-card">
+            <div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className="tayyar-focus-topic-label">NEEDS A REVIEW</span><h3 className="mt-2 truncate text-base font-semibold">{topic.topic}</h3><p className="mt-1 truncate text-xs text-muted-foreground">{topic.subject || subject?.name || "Your coursework"}</p></div><span className="tayyar-focus-score">{topic.mastery}%</span></div>
+            <Progress value={topic.mastery} className="mt-4 h-2" />
+            <p className="mt-3 min-h-10 text-xs leading-5 text-muted-foreground">Practice signal from {topic.questions_attempted} question{topic.questions_attempted === 1 ? "" : "s"}{daysSince !== null ? ` · last practiced ${daysSince === 0 ? "today" : `${daysSince} day${daysSince === 1 ? "" : "s"} ago`}` : ""}.</p>
+            <Button size="sm" className="mt-3 w-full" onClick={() => subject && practice(subject, "topic", topic.topic)} disabled={!subject}>Practice {topic.topic}<ArrowRight className="ml-2 h-3.5 w-3.5" /></Button>
+          </article>
+        })}</div> : <div className="tayyar-panel flex flex-wrap items-center justify-between gap-4 p-5"><div><p className="font-medium">No weak topics flagged</p><p className="mt-1 text-sm text-muted-foreground">Keep practicing to build a clearer picture of what to review next.</p></div><Button asChild variant="outline"><Link href="/quiz-setup">Start a practice quiz <ArrowRight className="ml-2 h-4 w-4" /></Link></Button></div>}
+      </section>}
+
+      {(activeSection === "weak-topics" || activeSection === "mistakes") && <section className="mt-10 grid max-w-5xl gap-4">
+        {activeSection === "weak-topics" && <div className="tayyar-panel p-5 sm:p-6"><div className="flex items-start justify-between gap-4"><div><p className="tayyar-eyebrow">FOCUS NEXT</p><h2 className="mt-1 text-lg font-semibold">Topics to strengthen</h2><p className="mt-1 text-sm text-muted-foreground">Each signal uses your saved answers and review timing.</p></div><div className="tayyar-icon-tile"><Target className="h-5 w-5" /></div></div>
+          {(overview?.weak_topics || []).length ? <div className="mt-5 grid gap-3 md:grid-cols-2">{overview.weak_topics.slice(0, 8).map((topic: any) => { const subject = subjects.find((item) => item.id === topic.subject_id) || subjects.find((item) => item.topic_performance.some((entry) => entry.topic === topic.topic)); const daysSince = topic.last_practiced ? Math.max(0, Math.floor((Date.now() - new Date(topic.last_practiced).getTime()) / 86_400_000)) : null; return <article key={`${topic.subject_id}-${topic.topic}`} className="tayyar-weak-topic-row"><div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold">{topic.topic}</h3><p className="mt-1 text-xs text-muted-foreground">{topic.subject || subject?.name || "Course topic"} · {topic.questions_attempted} answer{topic.questions_attempted === 1 ? "" : "s"}</p></div><span className="tayyar-focus-score">{topic.mastery}%</span></div><Progress value={topic.mastery} className="mt-3 h-2" /><p className="mt-2 text-xs leading-5 text-muted-foreground">{topic.mastery < 60 ? "Recent performance is below the 60% review threshold." : "A review is due based on your recent practice."}{daysSince !== null ? ` Last practiced ${daysSince === 0 ? "today" : `${daysSince} day${daysSince === 1 ? "" : "s"} ago`}.` : ""}</p><Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => subject && practice(subject, "topic", topic.topic)} disabled={!subject}>Practice this topic <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Button></article>})}</div>
             : <div className="mt-5 rounded-xl bg-muted/40 px-4 py-5"><p className="text-sm font-medium">No weak topics identified yet</p><p className="mt-1 text-sm text-muted-foreground">Complete a few quizzes to see which concepts deserve more attention.</p></div>}
-        </div>
-        <div id="mistakes" className="tayyar-panel scroll-mt-24 p-5 sm:p-6"><div className="flex items-start justify-between gap-4"><div><p className="tayyar-eyebrow">REVIEW WHAT YOU MISSED</p><h2 className="mt-1 text-lg font-semibold">Mistake book <span className="text-muted-foreground">({mistakes.length})</span></h2></div><div className="tayyar-icon-tile"><BookOpen className="h-5 w-5" /></div></div>
-          {mistakes.length ? <><div className="mt-5 space-y-3">{mistakes.slice(0, 2).map((item, index) => <div key={`${item.question_id}-${index}`} className="rounded-xl border border-border/70 p-3.5"><div className="mb-2 flex items-center justify-between gap-2"><span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium">{item.topic}</span><span className="text-xs text-muted-foreground">{item.subject}</span></div><p className="line-clamp-2 text-sm font-medium leading-5">{item.question}</p><p className="mt-2 text-xs text-muted-foreground">Your answer: <span className="text-rose-600 dark:text-rose-400">{item.your_answer_text || "Not answered"}</span></p>{item.explanation && <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.explanation}</p>}</div>)}</div><Button variant="outline" className="mt-4 w-full" onClick={practiceMistakes}>Practice concepts from my mistakes <ArrowRight className="ml-2 h-4 w-4" /></Button></>
-            : <div className="mt-5 rounded-xl bg-muted/40 px-4 py-5"><p className="text-sm font-medium">Your review list is clear</p><p className="mt-1 text-sm text-muted-foreground">Questions you miss will appear here with their correct answer and explanation.</p></div>}
-        </div>
-      </section>
+        </div>}
+        {activeSection === "mistakes" && (
+          <div className="tayyar-panel p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="tayyar-eyebrow">REVIEW WHAT YOU MISSED</p>
+                <h2 className="mt-1 text-lg font-semibold">Mistake book <span className="text-muted-foreground">({mistakes.length})</span></h2>
+              </div>
+              <div className="tayyar-icon-tile"><BookOpen className="h-5 w-5" /></div>
+            </div>
+            {mistakes.length ? (
+              <>
+                <div className="mt-5 space-y-3">
+                  {mistakes.map((item, index) => (
+                    <div key={`${item.question_id}-${index}`} className="rounded-xl border border-border/70 p-3.5">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium">{item.topic}</span>
+                        <span className="text-xs text-muted-foreground">{item.subject}</span>
+                      </div>
+                      <p className="text-sm font-medium leading-5">{item.question}</p>
+                      <p className="mt-2 text-xs text-muted-foreground">Your answer: <span className="text-rose-600 dark:text-rose-400">{item.your_answer_text || "Not answered"}</span></p>
+                      {item.explanation && <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.explanation}</p>}
+                    </div>
+                  ))}
+                </div>
+                <Button variant="outline" className="mt-4 w-full" onClick={practiceMistakes}>Practice concepts from my mistakes <ArrowRight className="ml-2 h-4 w-4" /></Button>
+              </>
+            ) : (
+              <div className="mt-5 rounded-xl bg-muted/40 px-4 py-5">
+                <p className="text-sm font-medium">Your review list is clear</p>
+                <p className="mt-1 text-sm text-muted-foreground">Questions you miss will appear here with their correct answer and explanation.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </section>}
 
-      <section id="progress" className="mt-10 scroll-mt-24"><div className="mb-4"><p className="tayyar-eyebrow">YOUR PRACTICE READINESS</p><h2 className="mt-1 text-xl font-semibold tracking-tight">Progress by subject</h2><p className="mt-1 text-sm text-muted-foreground">Practice estimates based on your quiz history.</p></div>
+      {activeSection === "progress" && <section className="mt-10 max-w-5xl"><div className="mb-4"><p className="tayyar-eyebrow">YOUR PRACTICE READINESS</p><h2 className="mt-1 text-xl font-semibold tracking-tight">Progress by subject</h2><p className="mt-1 text-sm text-muted-foreground">Practice estimates based on your quiz history.</p></div>
         {subjects.length ? <div className="grid gap-3 md:grid-cols-2">{subjects.map((subject) => { const topics = subject.topic_performance || []; const strong = topics.filter((topic) => topic.mastery >= 75).length; const improving = topics.filter((topic) => topic.mastery >= 50 && topic.mastery < 75).length; const weak = topics.filter((topic) => topic.mastery < 50).length; return <article key={subject.id} className="tayyar-panel p-4 sm:p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{subject.name}</h3><p className="mt-1 text-xs text-muted-foreground">{subject.questions_attempted} questions practiced</p></div><span className="tayyar-readiness-value">{subject.practice_mastery}%</span></div><Progress value={subject.practice_mastery} className="mt-4 h-2" /><div className="mt-3 flex flex-wrap gap-2 text-[11px]"><span className="tayyar-topic-pill">{strong} strong</span><span className="tayyar-topic-pill">{improving} improving</span><span className="tayyar-topic-pill is-weak">{weak} to strengthen</span></div></article> })}</div> : <div className="tayyar-panel p-5 text-sm text-muted-foreground">Your subject readiness estimates will appear after you add a subject and practice.</div>}
         {(overview?.improved_topics || []).length > 0 && <div className="tayyar-panel mt-4 p-5"><div className="mb-4 flex items-center gap-3"><div className="tayyar-icon-tile"><TrendingUp className="h-4 w-4" /></div><div><h3 className="text-sm font-semibold">Topics moving forward</h3><p className="text-xs text-muted-foreground">Compared with your earlier practice</p></div></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{overview.improved_topics.slice(0, 6).map((topic: any) => <div key={topic.topic} className="tayyar-improved-topic"><span className="truncate text-sm font-medium">{topic.topic}</span><span className="shrink-0 text-xs font-semibold text-emerald-400">+{topic.improvement} pts</span></div>)}</div></div>}
-      </section>
+      </section>}
 
-      <section id="activity" className="mt-10 scroll-mt-24"><div className="mb-4 flex items-end justify-between gap-3"><div><p className="tayyar-eyebrow">KEEP YOUR MOMENTUM</p><h2 className="mt-1 text-xl font-semibold tracking-tight">Recent activity</h2></div><Link href="/quiz-setup" className="text-sm font-medium text-primary hover:underline">Start a quiz <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></Link></div>
+      {activeSection === "activity" && <section className="mt-10 max-w-5xl"><div className="mb-4 flex items-end justify-between gap-3"><div><p className="tayyar-eyebrow">KEEP YOUR MOMENTUM</p><h2 className="mt-1 text-xl font-semibold tracking-tight">Recent activity</h2></div><Link href="/quiz-setup" className="text-sm font-medium text-primary hover:underline">Start a quiz <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></Link></div>
         {recentQuizzes.length || recentSessions.length ? <div className="tayyar-panel divide-y divide-border/70">{[...recentQuizzes.map((item) => ({ ...item, activityType: "quiz" })), ...recentSessions.map((item: any) => ({ ...item, activityType: "session" }))].sort((a, b) => new Date(b.created_at || b.completed_at || 0).getTime() - new Date(a.created_at || a.completed_at || 0).getTime()).slice(0, 6).map((activity: any, index) => <div key={`${activity.activityType}-${activity.id}-${index}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-5"><div className="flex min-w-0 items-center gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/5 text-primary">{activity.activityType === "quiz" ? <Target className="h-4 w-4" /> : <BookOpen className="h-4 w-4" />}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{activity.topic || activity.subject || "Study session"}</p><p className="text-xs capitalize text-muted-foreground">{activity.activityType === "quiz" ? `${activity.correct_answers ?? 0}/${activity.total_questions ?? 0} correct · ${activity.difficulty || "practice"}` : `${activity.mode || "Study"} · ${activity.duration_minutes || 0} min`}</p></div></div><div className="flex items-center gap-3">{activity.activityType === "quiz" && <><div className="text-right"><p className="text-sm font-semibold tabular-nums">{Math.round(activity.score || 0)}%</p><p className="text-[11px] text-muted-foreground">{activity.created_at ? new Date(activity.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}</p></div><Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setSelectedQuiz(activity)}>Review</Button></>}{activity.activityType === "session" && <p className="text-[11px] text-muted-foreground">{(activity.created_at || activity.completed_at) ? new Date(activity.created_at || activity.completed_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}</p>}</div></div>)}</div>
           : <div className="tayyar-panel flex flex-wrap items-center justify-between gap-4 p-5"><p className="text-sm text-muted-foreground">Your completed quizzes and learning sessions will show up here.</p><Button asChild size="sm" variant="outline"><Link href="/study-modes">Explore study modes</Link></Button></div>}
-      </section>
-
-      <p className="mt-6 text-center text-xs text-muted-foreground">Practice mastery and readiness are estimates based on your quiz history, not predicted exam marks.</p>
+      </section>}
+      {activeSection !== "overview" && <p className="mt-6 max-w-5xl text-xs text-muted-foreground">Practice mastery and readiness are estimates based on your quiz history, not predicted exam marks.</p>}
 
       {selectedQuiz && <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/55 p-3 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedQuiz(null) }}><section role="dialog" aria-modal="true" aria-label="Quiz answer review" className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-2xl border bg-background shadow-2xl"><div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background/95 px-5 py-4 backdrop-blur"><div><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">QUIZ REVIEW</p><h2 className="mt-1 text-lg font-semibold">{selectedQuiz.topic || "Practice quiz"} · {Math.round(selectedQuiz.score || 0)}%</h2><p className="mt-1 text-xs text-muted-foreground">{selectedQuiz.correct_answers || 0} of {selectedQuiz.total_questions || 0} correct</p></div><button aria-label="Close review" onClick={() => setSelectedQuiz(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button></div><div className="space-y-3 p-4 sm:p-5">{Object.entries(selectedQuiz.questions_data || {}).filter(([key]) => key !== "__meta__").map(([id, question]: [string, any], index: number) => <article key={id} className="rounded-xl border p-4"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-medium text-muted-foreground">Question {index + 1}{question.topic ? ` · ${question.topic}` : ""}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${question.is_correct ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-rose-500/10 text-rose-700 dark:text-rose-300"}`}>{question.is_correct ? "Correct" : "Review this"}</span></div><p className="text-sm font-medium leading-6">{question.question}</p>{!question.is_correct && <p className="mt-3 text-xs leading-5 text-muted-foreground">Your answer: <span className="text-rose-600 dark:text-rose-400">{question.user_answer ? `${question.user_answer}. ${question.options?.[question.user_answer.charCodeAt(0) - 65] || ""}` : "Not answered"}</span><br />Correct answer: <span className="text-emerald-700 dark:text-emerald-300">{question.correct_answer}. {question.options?.[question.correct_answer?.charCodeAt(0) - 65] || ""}</span></p>}{question.explanation && <p className="mt-2 text-xs leading-5 text-muted-foreground">{question.explanation}</p>}{question.source && <p className="mt-2 text-[11px] text-muted-foreground">Source: {question.source.title}, page {question.source.page}</p>}</article>)}</div></section></div>}
       </div>

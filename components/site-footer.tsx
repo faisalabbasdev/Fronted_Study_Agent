@@ -1,11 +1,12 @@
 import Link from "next/link"
 import { Check } from "lucide-react"
+import BrandLogo from "./brand-logo"
 
 export default function SiteFooter() {
   return <footer className="tayyar-footer">
     <div className="tayyar-footer-main">
       <div>
-        <Link href="/" className="tayyar-brand"><span className="tayyar-brand-glyph">T</span><span className="tayyar-brand-copy"><strong>Tayyar</strong><small>AI EXAM PREPARATION</small></span></Link>
+        <Link href="/" className="tayyar-brand" aria-label="Tayyar home"><BrandLogo className="h-16 w-48 object-contain" /></Link>
         <p>Study from your own materials.<br />Know what to practice next.</p>
         <span className="tayyar-footer-tag"><Check /> Built around your coursework</span>
       </div>

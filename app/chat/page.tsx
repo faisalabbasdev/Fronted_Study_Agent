@@ -1,432 +1,149 @@
 "use client"
 
-import * as React from "react"
-import { useSearchParams } from "next/navigation"
-import { MessageBubble } from "@/components/chat/message-bubble"
-import ChatInput from "@/components/chat/chat-input"
-import { apiClient } from "@/lib/api"
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { ArrowUp, BookOpen, Brain, GraduationCap, LayoutDashboard, Loader2, LogOut, MessageCircle, Plus, Search, Sparkles, Target } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
-import { Suspense } from "react"
-import { 
-  ModeHeader, 
-  ModeMessageBubble, 
-  ModeTypingIndicator, 
-  ModeInputArea, 
-  ModeQuickActions,
-  modeThemes 
-} from "@/components/chat/mode-specific-ui"
+import { apiClient } from "@/lib/api"
 import { StudyLoader } from "@/components/ui/study-loader"
+import BrandLogo from "@/components/brand-logo"
 
-type Msg = { id: string; role: "user" | "ai"; content: string }
-
-function ChatPageContent() {
-  const searchParams = useSearchParams()
-  const mode = searchParams.get('mode') || 'beginner'
-  const { user } = useAuth()
-  
-  const [messages, setMessages] = React.useState<Msg[]>([])
-  const [typing, setTyping] = React.useState(false)
-  const [sessionId, setSessionId] = React.useState<string | null>(null)
-  const [currentSession, setCurrentSession] = React.useState<any>(null)
-  const [showSessionOptions, setShowSessionOptions] = React.useState(false)
-  const [sessionTopic, setSessionTopic] = React.useState<string>("General Study Session")
-  const [sessionCreated, setSessionCreated] = React.useState<boolean>(false)
-  const scrollerRef = React.useRef<HTMLDivElement>(null)
-
-  // Function to extract topic from user message
-  const extractTopicFromMessage = (message: string): string => {
-    const lowerMessage = message.toLowerCase().trim()
-    
-    // Common educational topics with comprehensive keywords
-    const topicKeywords = {
-      'Mathematics': ['math', 'mathematics', 'algebra', 'calculus', 'geometry', 'trigonometry', 'statistics', 'arithmetic', 'equation', 'formula', 'derivative', 'integral', 'function', 'polynomial', 'quadratic', 'linear', 'probability'],
-      'Science': ['science', 'physics', 'chemistry', 'biology', 'earth science', 'astronomy', 'anatomy', 'photosynthesis', 'cell', 'molecule', 'atom', 'element', 'compound', 'reaction', 'force', 'energy', 'motion', 'gravity', 'evolution', 'ecosystem'],
-      'Programming': ['programming', 'coding', 'python', 'javascript', 'java', 'c++', 'html', 'css', 'react', 'node', 'function', 'variable', 'loop', 'array', 'object', 'class', 'method', 'algorithm', 'debug', 'compile', 'syntax'],
-      'English': ['english', 'grammar', 'literature', 'writing', 'reading', 'essay', 'poetry', 'novel', 'sentence', 'paragraph', 'vocabulary', 'spelling', 'punctuation', 'metaphor', 'simile', 'character', 'plot', 'theme'],
-      'History': ['history', 'world history', 'ancient', 'medieval', 'renaissance', 'war', 'civilization', 'empire', 'revolution', 'battle', 'treaty', 'monarchy', 'democracy', 'timeline', 'century', 'decade'],
-      'Geography': ['geography', 'countries', 'capitals', 'continents', 'oceans', 'mountains', 'rivers', 'climate', 'weather', 'population', 'culture', 'language', 'religion', 'economy', 'resources'],
-      'Art': ['art', 'painting', 'drawing', 'sculpture', 'design', 'color', 'artist', 'canvas', 'brush', 'palette', 'composition', 'perspective', 'shading', 'texture', 'gallery', 'museum'],
-      'Music': ['music', 'instrument', 'piano', 'guitar', 'violin', 'composer', 'song', 'melody', 'harmony', 'rhythm', 'note', 'scale', 'chord', 'symphony', 'orchestra', 'concert'],
-      'Psychology': ['psychology', 'behavior', 'mind', 'brain', 'emotion', 'personality', 'cognitive', 'memory', 'learning', 'motivation', 'stress', 'anxiety', 'therapy', 'consciousness'],
-      'Economics': ['economics', 'money', 'finance', 'business', 'market', 'trade', 'supply', 'demand', 'inflation', 'gdp', 'investment', 'budget', 'profit', 'loss', 'revenue'],
-      'Philosophy': ['philosophy', 'ethics', 'logic', 'morality', 'existence', 'truth', 'reality', 'knowledge', 'wisdom', 'virtue', 'justice', 'freedom', 'determinism', 'metaphysics'],
-      'Computer Science': ['computer science', 'algorithms', 'data structures', 'software engineering', 'database', 'network', 'security', 'operating system', 'artificial intelligence', 'machine learning'],
-      'Artificial Intelligence': ['ai', 'artificial intelligence', 'machine learning', 'neural network', 'deep learning', 'algorithm', 'model', 'training', 'prediction', 'classification', 'regression']
-    }
-    
-    // Find matching topic with priority scoring
-    let bestMatch = { topic: 'General Study Session', score: 0 }
-    
-    for (const [topic, keywords] of Object.entries(topicKeywords)) {
-      let score = 0
-      for (const keyword of keywords) {
-        if (lowerMessage.includes(keyword)) {
-          // Longer keywords get higher scores
-          score += keyword.length
-          // Exact matches get bonus points
-          if (lowerMessage === keyword) {
-            score += 10
-          }
-        }
-      }
-      
-      if (score > bestMatch.score) {
-        bestMatch = { topic, score }
-      }
-    }
-    
-    // If we found a good match, return it
-    if (bestMatch.score > 0) {
-      return bestMatch.topic
-    }
-    
-    // Try to extract from question patterns
-    const questionPatterns = [
-      /(?:what is|what are|explain|tell me about|how does|how do)\s+(.+?)(?:\?|$)/i,
-      /(?:can you help me with|i need help with|i want to learn about)\s+(.+?)(?:\?|$)/i,
-      /(?:teach me|show me|help me understand)\s+(.+?)(?:\?|$)/i
-    ]
-    
-    for (const pattern of questionPatterns) {
-      const match = lowerMessage.match(pattern)
-      if (match && match[1]) {
-        const subject = match[1].trim()
-        if (subject.length > 2 && subject.length < 50) {
-          // Capitalize first letter of each word
-          return subject.split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1)
-          ).join(' ')
-        }
-      }
-    }
-    
-    // Default fallback
-    return "General Study Session"
-  }
-
-  // Initialize chat based on mode
-  React.useEffect(() => {
-    const initializeChat = async () => {
-      const modeMessages = {
-        beginner: `🌱 **Welcome to Beginner Mode!** 
-
-Hi there! I'm your friendly AI Study Assistant, and I'm here to help you learn in the most comfortable way possible! 
-
-✨ **What I can do for you:**
-• Explain complex topics in simple, easy-to-understand language
-• Provide real-world examples that make learning fun
-• Break down difficult concepts into small, manageable steps
-• Answer all your "silly" questions (there are no silly questions!)
-• Encourage you every step of the way
-
-🎯 **Just tell me what you'd like to learn about!** Whether it's math, science, history, or anything else - I'm here to help you succeed! 
-
-What topic interests you today? 😊`,
-        
-        practice: `🎯 **Welcome to Practice Mode!**
-
-Hello! I'm your AI Study Assistant in Practice Mode, and I'm excited to help you master new skills through hands-on practice!
-
-💪 **What I specialize in:**
-• Interactive exercises and practice problems
-• Step-by-step solutions with detailed explanations
-• Hints and guidance without giving away answers
-• Multiple approaches to solving problems
-• Immediate feedback on your attempts
-• Building your problem-solving confidence
-
-🚀 **Ready to practice?** Just tell me what subject you'd like to work on, and I'll create engaging exercises tailored to your level!
-
-What would you like to practice today?`,
-        
-        exam: `📝 **Welcome to Exam Mode!**
-
-Greetings! I'm your AI Study Assistant in Exam Mode, and I'm here to help you excel in your assessments and exams!
-
-🏆 **How I can help you succeed:**
-• Create timed quizzes to simulate real exam conditions
-• Review key concepts and important topics
-• Provide comprehensive study strategies
-• Analyze your performance and identify areas for improvement
-• Offer memory techniques and exam preparation tips
-• Build your confidence for test-taking
-
-⏰ **Let's get you exam-ready!** Tell me what subject you're preparing for, and I'll create a focused study plan with assessments.
-
-What exam or assessment are you preparing for?`,
-        
-        assistant: `🤖 **Welcome to AI Assistant Mode!**
-
-Hello! I'm your advanced AI Study Assistant, powered by cutting-edge artificial intelligence to provide you with comprehensive educational support across all subjects and learning levels.
-
-🧠 **My Advanced Capabilities:**
-• Deep analysis and insights on any academic topic
-• Personalized study plans tailored to your learning style
-• Comprehensive resource recommendations and research assistance
-• Advanced problem-solving with multiple solution approaches
-• Real-time learning adaptation based on your progress
-• Cross-subject connections and interdisciplinary insights
-
-🚀 **Ready to learn?** I can help you with any subject, from basic concepts to advanced research. Just ask me anything!
-
-What would you like to explore or learn about today?`
-      }
-      
-      setMessages([{ 
-        id: "1", 
-        role: "ai", 
-        content: modeMessages[mode as keyof typeof modeMessages] || modeMessages.assistant 
-      }])
-    }
-    
-    initializeChat()
-  }, [mode])
-
-  // Function to create study session with extracted topic
-  const createStudySessionWithTopic = async (topic: string) => {
-    if (user && !sessionCreated) {
-        try {
-          const session = await apiClient.createStudySession({
-          topic: topic,
-            mode: mode as 'beginner' | 'practice' | 'exam',
-          notes: `Started ${mode} mode study session on ${topic}`
-          })
-          setCurrentSession(session)
-          setSessionId(session.id.toString())
-        setSessionCreated(true)
-        } catch (error) {
-          console.error('Failed to create study session:', error)
-        }
-      }
-    }
-
-  const onSend = async (text: string) => {
-    const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content: text }
-    setMessages((m) => [...m, userMsg])
-    setTyping(true)
-    
-    // Extract topic and create session if this is the first user message
-    if (messages.filter(m => m.role === 'user').length === 0) {
-      const extractedTopic = extractTopicFromMessage(text)
-      setSessionTopic(extractedTopic)
-      
-      // Create study session with the extracted topic
-      await createStudySessionWithTopic(extractedTopic)
-    }
-    
-    try {
-      // Send message to AI agent with mode-specific context
-      const modeContext = {
-        beginner: "You are in BEGINNER MODE. Use simple language and provide basic explanations with everyday examples.",
-        practice: "You are in PRACTICE MODE. Create interactive exercises with hints and step-by-step solutions.",
-        exam: "You are in EXAM MODE. Provide timed assessments with results and comprehensive review.",
-        assistant: "You are an ADVANCED AI ASSISTANT. Provide comprehensive, intelligent responses with deep analysis, multiple perspectives, and advanced insights. Adapt your communication style to the user's level while maintaining professional expertise."
-      }
-      
-      const response = await apiClient.chatWithAgent({
-        message: `${modeContext[mode as keyof typeof modeContext]}\n\nUser Question: ${text}`,
-        session_id: sessionId || undefined,
-        mode: mode, // Pass mode as direct parameter for orchestration
-        context: {
-          mode: mode,
-          topic: sessionTopic,
-          user_id: user?.id,
-          study_mode_context: modeContext[mode as keyof typeof modeContext]
-        }
-      })
-      
-      
-      // Check if response has the expected structure
-      if (response && response.response) {
-        // Update session ID if provided in response
-        if (response.session_id && response.session_id !== sessionId) {
-          setSessionId(response.session_id)
-        }
-        
-        const aiMsg: Msg = {
-          id: crypto.randomUUID(),
-          role: "ai",
-          content: response.response
-        }
-        setMessages((m) => [...m, aiMsg])
-      } else {
-        throw new Error('Invalid response format from AI agent')
-      }
-    } catch (error) {
-      console.error('Chat error:', error)
-      const errorMsg: Msg = {
-        id: crypto.randomUUID(),
-        role: "ai",
-        content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment."
-      }
-      setMessages((m) => [...m, errorMsg])
-    } finally {
-      setTyping(false)
-      scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: "smooth" })
-    }
-  }
-
-  React.useEffect(() => {
-    scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight })
-  }, [])
-
-  // Cleanup: End session when component unmounts
-  React.useEffect(() => {
-    return () => {
-      if (currentSession && sessionId) {
-        // End the session when leaving the page
-        apiClient.updateStudySession(sessionId, {
-          end_time: new Date().toISOString(),
-          duration_minutes: Math.floor((Date.now() - new Date(currentSession.start_time).getTime()) / 60000),
-          notes: `Ended ${mode} mode study session`
-        }).catch(console.error)
-      }
-    }
-  }, [currentSession, sessionId, mode])
-
-  const getModeDisplayName = (mode: string) => {
-    const modeNames = {
-      beginner: "Beginner Mode",
-      practice: "Practice Mode", 
-      exam: "Exam Mode",
-      assistant: "AI Assistant"
-    }
-    return modeNames[mode as keyof typeof modeNames] || "AI Assistant"
-  }
-
-  const startNewSession = async () => {
-    try {
-      // Clear current messages
-      setMessages([])
-      
-      // Create new session
-      const session = await apiClient.createStudySession({
-        topic: "AI Assistant Chat",
-        mode: mode as 'beginner' | 'practice' | 'exam',
-        notes: `Started new ${mode} mode session`
-      })
-      
-      setCurrentSession(session)
-      setSessionId(session.id.toString())
-      
-      // Initialize with welcome message
-      const welcomeMessage = {
-        id: crypto.randomUUID(),
-        role: "ai" as const,
-        content: "New session started! I'm ready to help you with your educational questions. What would you like to learn about?"
-      }
-      setMessages([welcomeMessage])
-      
-      setShowSessionOptions(false)
-    } catch (error) {
-      console.error('Failed to start new session:', error)
-    }
-  }
-
-  const continueCurrentSession = () => {
-    setShowSessionOptions(false)
-  }
-
-
-  console.log("test the response from the ai agent", messages)
-
-
-  const theme = modeThemes[mode as keyof typeof modeThemes] || modeThemes.beginner
-
-  return (
-    <div className="relative flex min-h-[calc(100vh-4rem)] flex-col">
-      {/* Mode-specific header */}
-      <ModeHeader mode={mode} />
-      
-      {/* Session info bar */}
-      <div className="bg-card/50 border-b border-border px-4 py-2">
-        <div className="mx-auto max-w-3xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-sm font-medium text-foreground">
-              {getModeDisplayName(mode)}
-            </span>
-            {sessionId && (
-              <span className="text-xs text-muted-foreground">
-                Session #{sessionId}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setShowSessionOptions(!showSessionOptions)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Session Options
-            </button>
-          <div className="text-xs text-muted-foreground">
-            {user?.full_name || user?.username}
-          </div>
-        </div>
-      </div>
-
-        {/* Session Options Dropdown */}
-        {showSessionOptions && (
-          <div className="mx-auto max-w-3xl mt-2 p-3 bg-card border border-border rounded-lg shadow-sm">
-            <div className="space-y-2">
-              <button
-                onClick={startNewSession}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors"
-              >
-                Start New Session
-              </button>
-              <button
-                onClick={continueCurrentSession}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors"
-              >
-                Continue Current Session
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Chat messages area */}
-      <div ref={scrollerRef} className="mx-auto mt-6 w-full max-w-3xl flex-1 overflow-y-auto px-4 pb-32 bg-background">
-        <div className="flex flex-col gap-4">
-          {messages.map((m) => (
-            <ModeMessageBubble key={m.id} role={m.role} mode={mode}>
-              {m.content}
-            </ModeMessageBubble>
-          ))}
-          {typing && <ModeTypingIndicator mode={mode} />}
-        </div>
-      </div>
-
-      {/* Quick actions */}
-      <ModeQuickActions 
-        mode={mode} 
-        onAction={(action) => onSend(action)} 
-      />
-
-      {/* Input area */}
-      <ModeInputArea mode={mode} />
-      
-      {/* Chat input */}
-      <div className="fixed bottom-0 inset-x-0 bg-background/95 backdrop-blur-sm border-t border-border">
-        <ChatInput onSend={onSend} />
-      </div>
-    </div>
-  )
-}
+type ChatMessage = { id: string; role: "user" | "assistant"; text: string }
+type ChatSession = { session_id: string; title?: string | null; last_activity?: string | null; message_count?: number }
+type LearningSnapshot = { subjects?: any[]; weak_topics?: any[]; daily_practice?: any; [key: string]: any }
 
 export default function ChatPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen">
-        <StudyLoader 
-          size="xl" 
-          variant="detailed" 
-          text="Initializing your AI study assistant..."
-        />
+  const { user, isAuthenticated, isLoading, logout } = useAuth()
+  const router = useRouter()
+  const [overview, setOverview] = useState<LearningSnapshot | null>(null)
+  const [mistakes, setMistakes] = useState<any[]>([])
+  const [recentQuizzes, setRecentQuizzes] = useState<any[]>([])
+  const [loadingContext, setLoadingContext] = useState(true)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
+  const [draft, setDraft] = useState("")
+  const [sending, setSending] = useState(false)
+  const [sessionId, setSessionId] = useState<string | undefined>()
+  const [error, setError] = useState("")
+  const [mobileMenu, setMobileMenu] = useState(false)
+  const endRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { if (!isLoading && !isAuthenticated) router.replace("/login") }, [isAuthenticated, isLoading, router])
+  useEffect(() => {
+    if (!isAuthenticated) return
+    Promise.allSettled([apiClient.getLearningOverview(), apiClient.getQuizHistory(5), apiClient.getChatSessions()])
+      .then(([learning, history, sessions]) => {
+        if (learning.status === "fulfilled") {
+          setOverview(learning.value)
+          setMistakes(learning.value?.mistakes || [])
+        }
+        if (history.status === "fulfilled") setRecentQuizzes(history.value?.quizzes || [])
+        if (sessions.status === "fulfilled") setChatSessions(sessions.value?.sessions || [])
+      })
+      .finally(() => setLoadingContext(false))
+  }, [isAuthenticated])
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }) }, [messages, sending])
+
+  const subjects = useMemo(() => overview?.subjects || [], [overview?.subjects])
+  const weakTopics = useMemo(() => overview?.weak_topics || [], [overview?.weak_topics])
+  const studyContext = useMemo(() => ({
+    student_name: user?.full_name || user?.username,
+    university: user?.preferences?.onboarding?.university || subjects.find((subject) => subject.university)?.university || null,
+    program: user?.preferences?.onboarding?.program || subjects.find((subject) => subject.program)?.program || null,
+    semester: user?.preferences?.onboarding?.semester || subjects.find((subject) => subject.semester)?.semester || null,
+    subjects: subjects.map((subject) => ({ name: subject.name, exam_date: subject.exam_date, practice_mastery: subject.practice_mastery, weak_topics: subject.weak_topics?.map((topic: any) => topic.topic) || [] })),
+    weak_topics: weakTopics.map((topic: any) => ({ topic: topic.topic, subject: topic.subject, mastery: topic.mastery })),
+    daily_recommendation: overview?.daily_practice?.recommendation || null,
+    recent_quiz_results: recentQuizzes.slice(0, 5).map((quiz: any) => ({
+      subject: quiz.topic,
+      score_percent: Math.round(quiz.score || 0),
+      correct_answers: quiz.correct_answers,
+      total_questions: quiz.total_questions,
+      completed_at: quiz.created_at,
+    })),
+    recent_mistakes: mistakes.slice(0, 5).map((mistake: any) => ({
+      subject: mistake.subject,
+      topic: mistake.topic,
+      question: mistake.question,
+      student_answer: mistake.your_answer_text,
+      correct_answer: mistake.correct_answer_text,
+      explanation: mistake.explanation,
+    })),
+    instruction: "Use this saved Tayyar study context to give specific, supportive academic guidance. Do not invent university admissions deadlines, eligibility rules, course lists, or student scores. For current university information, direct the student to the official university links in Tayyar's university directory.",
+  }), [overview, subjects, user, weakTopics, recentQuizzes, mistakes])
+
+  const sendMessage = async (text = draft) => {
+    const message = text.trim()
+    if (!message || sending) return
+    setDraft(""); setError("")
+    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", text: message }])
+    setSending(true)
+    try {
+      const response = await apiClient.chatWithAgent({ message, session_id: sessionId, mode: "assistant", context: studyContext })
+      if (!response?.response) throw new Error("The study assistant returned an empty response. Please try again.")
+      if (response.session_id) setSessionId(response.session_id)
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: response.response }])
+    } catch (reason) {
+      const messageText = reason instanceof Error ? reason.message : "Could not reach the study assistant. Please try again."
+      setError(messageText)
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: "I couldn’t connect just now. Your study context is still here—try sending your question again in a moment." }])
+    } finally { setSending(false) }
+  }
+
+  const openChatSession = async (chatSession: ChatSession) => {
+    setError("")
+    setSessionId(chatSession.session_id)
+    setMobileMenu(false)
+    try {
+      const result = await apiClient.getChatHistory(200)
+      const rows = (result?.messages || []).filter((row: any) => row.session_id === chatSession.session_id)
+      setMessages(rows.flatMap((row: any) => [
+        ...(row.user_message ? [{ id: `${row.id}-user`, role: "user" as const, text: row.user_message }] : []),
+        ...(row.ai_response ? [{ id: `${row.id}-assistant`, role: "assistant" as const, text: row.ai_response }] : []),
+      ]))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not load this conversation.")
+    }
+  }
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void sendMessage() }
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage() } }
+  const suggestions = [
+    { icon: Target, title: "Help me with my weak topics", prompt: "Look at my weak topics and recommend what to practice first, with a short reason." },
+    { icon: BookOpen, title: "Plan today's study", prompt: "Create a focused study plan for today using my subjects, exam dates, and practice history." },
+    { icon: GraduationCap, title: "Explore my university", prompt: "Help me explore my university and course path. Tell me what details I should verify on the official university website." },
+  ]
+
+  if (isLoading || !isAuthenticated) return <div className="grid min-h-[80vh] place-items-center"><StudyLoader size="xl" variant="detailed" text="Opening your study chat…" /></div>
+
+  return <main className="tayyar-chat-workspace -mt-16 flex min-h-screen">
+    <aside className={`tayyar-chat-sidebar ${mobileMenu ? "is-open" : ""}`}>
+      <Link href="/dashboard" className="tayyar-chat-brand" aria-label="Tayyar dashboard"><BrandLogo className="h-16 w-48 object-contain" priority /></Link>
+      <div className="tayyar-platform-switch"><Link href="/dashboard"><LayoutDashboard />Platform</Link><Link href="/chat" className="is-active"><MessageCircle />Chat</Link></div>
+      <button type="button" className="tayyar-chat-new" onClick={() => { setMessages([]); setSessionId(undefined); setError(""); setMobileMenu(false) }}><Plus />New study chat</button>
+      <div className="px-4 pt-5">
+        <p className="tayyar-chat-sidebar-label">RECENT CHATS</p>
+        {chatSessions.length ? <div className="mt-2 grid gap-1">{chatSessions.map((item) => <button key={item.session_id} type="button" onClick={() => void openChatSession(item)} className={`truncate rounded-xl px-3 py-2 text-left text-xs transition hover:bg-white/[0.06] ${sessionId === item.session_id ? "bg-white/[0.06] text-foreground" : "text-muted-foreground"}`}>{item.title || "Study conversation"}</button>)}</div> : <p className="tayyar-chat-sidebar-empty mt-2">Your saved chats will appear here.</p>}
       </div>
-    }>
-      <ChatPageContent />
-    </Suspense>
-  )
+      <p className="tayyar-chat-sidebar-label">YOUR STUDY CONTEXT</p>
+      <div className="tayyar-chat-context"><span className="tayyar-chat-context-icon"><GraduationCap /></span><div><strong>{studyContext.university || "Your university"}</strong><small>{studyContext.program || "Add your program in profile"}</small></div></div>
+      <div className="tayyar-chat-sidebar-section"><div className="tayyar-chat-sidebar-heading"><span>Subjects</span><span>{subjects.length}</span></div>{subjects.length ? subjects.slice(0, 5).map((subject) => <div className="tayyar-chat-sidebar-subject" key={subject.id}><BookOpen /><span>{subject.name}</span></div>) : <p className="tayyar-chat-sidebar-empty">Add a subject to make your study guidance more personal.</p>}</div>
+      <div className="tayyar-chat-sidebar-section"><div className="tayyar-chat-sidebar-heading"><span>Needs attention</span><span>{weakTopics.length}</span></div>{weakTopics.length ? weakTopics.slice(0, 4).map((topic: any) => <div className="tayyar-chat-weak-topic" key={`${topic.subject}-${topic.topic}`}><Target /><span>{topic.topic}</span><small>{topic.mastery}%</small></div>) : <p className="tayyar-chat-sidebar-empty">Practice a few quizzes to identify focus topics.</p>}</div>
+      <div className="tayyar-chat-sidebar-footer"><span className="tayyar-user-avatar">{(user?.full_name || "S").slice(0, 1).toUpperCase()}</span><span><strong>{user?.full_name || user?.username || "Student"}</strong><small>Student account</small></span><button type="button" aria-label="Sign out" onClick={logout}><LogOut /></button></div>
+    </aside>
+
+    <section className="tayyar-chat-main">
+      <header className="tayyar-chat-header"><button type="button" className="tayyar-chat-mobile-menu" onClick={() => setMobileMenu((open) => !open)} aria-label="Toggle chat menu"><Search /></button><div><p className="tayyar-chat-eyebrow"><span /> YOUR STUDY COMPANION</p><h1>Chat with Tayyar</h1></div><div className="tayyar-chat-context-badge"><Sparkles />{loadingContext ? "Loading your study context" : `${subjects.length} subject${subjects.length === 1 ? "" : "s"} connected`}</div></header>
+      <div className="tayyar-chat-scroll">
+        {!messages.length ? <div className="tayyar-chat-empty"><div className="tayyar-chat-orb"><Sparkles /></div><p className="tayyar-chat-eyebrow">YOUR COURSEWORK, IN CONTEXT</p><h2>What would you like<br /><span>to work through?</span></h2><p className="tayyar-chat-empty-copy">Ask about a topic, get help planning practice, or talk through a previous mistake. Tayyar can use your saved subjects and weak-topic history.</p>
+          <div className="tayyar-chat-suggestions">{suggestions.map(({ icon: Icon, title, prompt }) => <button type="button" key={title} onClick={() => void sendMessage(prompt)}><span><Icon /></span><strong>{title}</strong><ArrowRightSmall /></button>)}</div>
+          {!subjects.length && <Link href="/dashboard/new-subject" className="tayyar-chat-add-subject">Add your first subject <ArrowRightSmall /></Link>}
+        </div> : <div className="tayyar-chat-messages">{messages.map((message) => <article key={message.id} className={`tayyar-chat-message ${message.role}`}><span className="tayyar-chat-message-avatar">{message.role === "assistant" ? <Sparkles /> : (user?.full_name || "S").slice(0, 1).toUpperCase()}</span><div><small>{message.role === "assistant" ? "Tayyar STUDY COMPANION" : "YOU"}</small><p>{message.text}</p></div></article>)}{sending && <div className="tayyar-chat-typing"><span /><span /><span /> Tayyar is thinking about your study context…</div>}<div ref={endRef} /></div>}
+      </div>
+      <div className="tayyar-chat-composer-wrap"><form className="tayyar-chat-composer" onSubmit={onSubmit}><textarea rows={1} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={onKeyDown} placeholder="Ask about your course, a weak topic, or what to study next…" aria-label="Message Tayyar" /><button type="submit" disabled={!draft.trim() || sending} aria-label="Send message">{sending ? <Loader2 className="animate-spin" /> : <ArrowUp />}</button></form><p>Enter to send · Shift + Enter for a new line · Tayyar uses saved study context; verify current admissions details with the university.</p>{error && <div className="tayyar-chat-error" role="alert">{error}</div>}</div>
+    </section>
+  </main>
 }
+
+function ArrowRightSmall() { return <ArrowUp className="rotate-45" /> }

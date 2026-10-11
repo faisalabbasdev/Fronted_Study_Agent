@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -86,8 +86,13 @@ function QuizContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [oneMinuteWarningShown, setOneMinuteWarningShown] = useState(false)
+  const [submissionFailed, setSubmissionFailed] = useState(false)
+  const [autoSubmitted, setAutoSubmitted] = useState(false)
   const [simpleExplanations, setSimpleExplanations] = useState<Record<string, string>>({})
   const [explainingQuestionId, setExplainingQuestionId] = useState<string | null>(null)
+  const quizStartedAt = useRef<number | null>(null)
+  const submissionInFlight = useRef(false)
+  const timeExpiryHandled = useRef(false)
   
   // Quiz parameters from URL
   const topic = searchParams.get('topic') || 'General Knowledge'
@@ -112,26 +117,6 @@ function QuizContent() {
       generateQuiz()
     }
   }, [isAuthenticated])
-
-  // Timer effect
-  useEffect(() => {
-    if (quizStarted && timeRemaining > 0) {
-      const timer = setTimeout(() => {
-        setTimeRemaining(timeRemaining - 1)
-        
-        // Show 1-minute warning
-        if (timeRemaining === 60 && !oneMinuteWarningShown) {
-          showToast("⏰ You have 1 minute remaining! Hurry up!", 'warning', 8000)
-          setOneMinuteWarningShown(true)
-        }
-      }, 1000)
-      return () => clearTimeout(timer)
-    } else if (quizStarted && timeRemaining === 0) {
-      // Auto-submit when time runs out
-      showToast("⏰ Time's up! Quiz submitted automatically.", 'warning', 5000)
-      submitQuiz(true) // Pass true for automatic submission
-    }
-  }, [quizStarted, timeRemaining, oneMinuteWarningShown, showToast])
 
   const generateQuiz = async () => {
     try {
@@ -167,6 +152,13 @@ function QuizContent() {
   }
 
   const startQuiz = () => {
+    quizStartedAt.current = Date.now()
+    submissionInFlight.current = false
+    timeExpiryHandled.current = false
+    setSubmissionFailed(false)
+    setAutoSubmitted(false)
+    setError(null)
+    setTimeRemaining(Math.max(1, quizData?.estimated_time || timeLimit) * 60)
     setQuizStarted(true)
   }
 
@@ -235,7 +227,7 @@ function QuizContent() {
   }
 
   const submitQuiz = async (isAutoSubmit: boolean = false) => {
-    if (!quizData) return
+    if (!quizData || submissionInFlight.current) return
 
     // Check if all questions are answered (only for manual submission)
     if (!isAutoSubmit) {
@@ -246,8 +238,11 @@ function QuizContent() {
       }
     }
 
+    submissionInFlight.current = true
+    if (isAutoSubmit) setAutoSubmitted(true)
     try {
       setLoading(true)
+      setSubmissionFailed(false)
       
       // Prepare answers for submission
       const answersForSubmission = quizData.questions.map(question => ({
@@ -256,7 +251,9 @@ function QuizContent() {
         is_correct: selectedAnswers[question.id] === question.correct_answer
       }))
 
-      const timeTaken = (quizData.estimated_time * 60) - timeRemaining
+      const totalTime = Math.max(1, quizData.estimated_time) * 60
+      const elapsed = quizStartedAt.current === null ? 0 : Math.floor((Date.now() - quizStartedAt.current) / 1000)
+      const timeTaken = Math.min(totalTime, Math.max(0, elapsed))
 
       // Prepare questions data for detailed review
       const questionsData: Record<string, any> = {}
@@ -293,12 +290,40 @@ function QuizContent() {
     } catch (err) {
       console.error('Failed to submit quiz:', err)
       setError(err instanceof Error ? err.message : 'Failed to submit quiz. Please try again.')
+      setSubmissionFailed(true)
     } finally {
+      submissionInFlight.current = false
       setLoading(false)
     }
   }
 
+  // The absolute deadline prevents slow renders/background tabs from extending the quiz.
+  useEffect(() => {
+    if (!quizStarted || showResult || quizStartedAt.current === null || !quizData) return
+    const durationSeconds = Math.max(1, quizData.estimated_time) * 60
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - (quizStartedAt.current || Date.now())) / 1000)
+      const remaining = Math.max(0, durationSeconds - elapsed)
+      setTimeRemaining(remaining)
+      if (remaining === 60 && !oneMinuteWarningShown) {
+        showToast("You have 1 minute remaining.", "warning", 8000)
+        setOneMinuteWarningShown(true)
+      }
+      if (remaining === 0 && !timeExpiryHandled.current) {
+        timeExpiryHandled.current = true
+        showToast("Time is up. Your answers are being submitted.", "warning", 5000)
+        void submitQuiz(true)
+      }
+    }
+    tick()
+    const timer = window.setInterval(tick, 250)
+    return () => window.clearInterval(timer)
+  }, [quizStarted, showResult, quizData, selectedAnswers, oneMinuteWarningShown, showToast])
+
   const restartQuiz = () => {
+    submissionInFlight.current = false
+    timeExpiryHandled.current = false
+    quizStartedAt.current = null
     setQuizData(null)
     setCurrentQuestionIndex(0)
     setSelectedAnswers({})
@@ -307,6 +332,8 @@ function QuizContent() {
     setTimeRemaining(0)
     setQuizStarted(false)
     setError(null)
+    setSubmissionFailed(false)
+    setAutoSubmitted(false)
     setOneMinuteWarningShown(false)
     generateQuiz()
   }
@@ -343,17 +370,14 @@ function QuizContent() {
     return (
       <>
         <ToastContainer />
-        <main className="mx-auto max-w-4xl px-4 py-20">
+        <main className="tayyar-quiz-page mx-auto max-w-4xl px-4 py-20">
           <Card className="text-center">
             <CardHeader>
-              <CardTitle className="text-red-600">Quiz Error</CardTitle>
+              <CardTitle className="text-red-600">{submissionFailed ? "Your result was not saved" : "Quiz Error"}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground mb-4">{error}</p>
-              <Button onClick={restartQuiz}>
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Try Again
-              </Button>
+              <p className="text-muted-foreground mb-4">{submissionFailed ? "Your answers are still here. Retry saving them, or return to the quiz to review your responses." : error}</p>
+              {submissionFailed ? <div className="flex flex-wrap justify-center gap-3"><Button onClick={() => { setError(null); void submitQuiz(timeRemaining === 0) }}><RotateCcw className="h-4 w-4 mr-2" />Retry saving result</Button><Button variant="outline" onClick={() => { setError(null); setSubmissionFailed(false) }}>Return to quiz</Button></div> : <Button onClick={restartQuiz}><RotateCcw className="h-4 w-4 mr-2" />Try Again</Button>}
             </CardContent>
           </Card>
         </main>
@@ -396,8 +420,8 @@ function QuizContent() {
     return (
       <>
         <ToastContainer />
-        <main className="mx-auto max-w-4xl px-4 py-20">
-          <Card className="text-center">
+        <main className="tayyar-quiz-page mx-auto max-w-4xl px-4 py-20">
+          <Card className="tayyar-quiz-result-card text-center">
           <CardHeader>
             <div className="flex items-center justify-center mb-4">
               {getScoreIcon(quizResult.score)}
@@ -408,11 +432,12 @@ function QuizContent() {
             <div className="text-lg text-muted-foreground">
               You completed the {topic} quiz!
             </div>
+            {autoSubmitted && <Badge variant="outline" className="mt-3 border-primary/30 bg-primary/5 text-primary">Submitted automatically when time ended</Badge>}
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Score Display with Enhanced Styling */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+              <div className="tayyar-quiz-result-metric text-center p-4 rounded-lg">
                 <div className={`text-4xl font-bold ${getScoreColor(quizResult.score)}`}>
                   {quizResult.score.toFixed(1)}%
                 </div>
@@ -421,7 +446,7 @@ function QuizContent() {
                   {quizResult.score >= 80 ? "Outstanding!" : quizResult.score >= 60 ? "Good Job!" : "Keep Trying!"}
                 </div>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
+              <div className="tayyar-quiz-result-metric is-positive text-center p-4 rounded-lg">
                 <div className="text-4xl font-bold text-green-600">
                   {quizResult.correct_answers}/{quizResult.total_questions}
                 </div>
@@ -430,7 +455,7 @@ function QuizContent() {
                   {quizResult.correct_answers === quizResult.total_questions ? "Perfect!" : "Well Done!"}
                 </div>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
+              <div className="tayyar-quiz-result-metric text-center p-4 rounded-lg">
                 <div className="text-4xl font-bold text-purple-600">
                   {Math.floor(quizResult.time_taken / 60)}:{(quizResult.time_taken % 60).toString().padStart(2, '0')}
                 </div>
@@ -687,11 +712,12 @@ function QuizContent() {
                 {quizData.difficulty.charAt(0).toUpperCase() + quizData.difficulty.slice(1)}
               </Badge>
             </div>
-            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-6">
               <div className="flex items-center gap-2 px-3 py-1 bg-red-50 rounded-full">
                 <Clock className="h-4 w-4 text-red-600" />
                 <span className="font-mono text-red-700 font-semibold">{formatTime(timeRemaining)}</span>
               </div>
+              {timeRemaining === 0 && <Button size="sm" variant="outline" onClick={() => void submitQuiz(true)} disabled={loading}>Submit remaining answers</Button>}
               <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-full">
                 <Target className="h-4 w-4 text-blue-600" />
                 <span className="text-blue-700 font-semibold">
@@ -759,6 +785,7 @@ function QuizContent() {
                   <button
                     key={index}
                     onClick={() => selectAnswer(currentQuestion.id, optionLetter)}
+                    disabled={timeRemaining === 0 || loading}
                     className={`w-full p-4 text-left rounded-lg border-2 transition-colors ${
                       isSelected 
                         ? 'border-primary bg-primary/10 text-primary' 
@@ -783,14 +810,14 @@ function QuizContent() {
             <div className="flex justify-between">
               <Button 
                 onClick={previousQuestion} 
-                disabled={currentQuestionIndex === 0}
+                disabled={currentQuestionIndex === 0 || timeRemaining === 0 || loading}
                 variant="outline"
               >
                 Previous
               </Button>
               
               {isLastQuestion ? (
-                <Button onClick={() => submitQuiz(false)} disabled={loading}>
+                <Button onClick={() => submitQuiz(false)} disabled={loading || timeRemaining === 0}>
                   {loading ? (
                     <div className="flex items-center gap-2">
                       <StudyLoader size="sm" variant="minimal" />
@@ -804,7 +831,7 @@ function QuizContent() {
                   )}
                 </Button>
               ) : (
-                <Button onClick={nextQuestion}>
+                <Button onClick={nextQuestion} disabled={timeRemaining === 0 || loading}>
                   Next
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
