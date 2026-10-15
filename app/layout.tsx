@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "react-hot-toast"
+import Script from "next/script"
 import "./globals.css"
 import SiteHeader from "@/components/site-header"
 import { AuthProvider } from "@/contexts/AuthContext"
@@ -11,8 +12,8 @@ import { LoadingProvider } from "@/contexts/LoadingContext"
 import { Suspense } from "react"
 
 export const metadata: Metadata = {
-  title: "Tayyar — AI Exam Preparation",
-  description: "Study from your own course materials, review mistakes, strengthen weak topics, and follow a personalized exam-preparation plan.",
+  title: "Tayyar — Your course material, your study space",
+  description: "Organize your subjects, practice with quizzes from your course PDFs, review mistakes, and follow your study progress with Tayyar.",
   keywords: ["AI learning", "study assistant", "education technology", "personalized learning", "quiz platform"],
   authors: [{ name: "Tayyar" }],
   creator: "Tayyar",
@@ -24,8 +25,8 @@ export const metadata: Metadata = {
   },
   metadataBase: new URL("https://studymodeagent.com"),
   openGraph: {
-    title: "Tayyar — AI Exam Preparation",
-    description: "Source-grounded quizzes, practice readiness, and personalized daily revision for university students.",
+    title: "Tayyar — Your course material, your study space",
+    description: "Organize your subjects, practice with quizzes from your course PDFs, review mistakes, and follow your study progress with Tayyar.",
     url: "https://studymodeagent.com",
     siteName: "Tayyar",
     images: [
@@ -41,8 +42,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Tayyar — AI Exam Preparation",
-    description: "Source-grounded quizzes and personalized revision based on your study materials.",
+    title: "Tayyar — Your course material, your study space",
+    description: "Organize your subjects, practice with quizzes from your course PDFs, review mistakes, and follow your study progress with Tayyar.",
     images: ["/og-image.png"],
   },
   robots: {
@@ -65,6 +66,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <Script id="tayyar-theme-init" strategy="beforeInteractive">{`try { const theme = localStorage.getItem("theme"); const dark = theme === "dark"; document.documentElement.classList.toggle("dark", dark); document.documentElement.classList.toggle("light", !dark); } catch { document.documentElement.classList.add("light"); }`}</Script>
+      </head>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <AuthProvider>
           <LoadingProvider>

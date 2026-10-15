@@ -9,10 +9,12 @@ import ThemeToggle from "./theme-toggle"
 import BrandLogo from "./brand-logo"
 
 const links = [
+  { href: "/", label: "Home" },
+  { href: "/dashboard/subjects", label: "My subjects" },
+  { href: "/study-modes", label: "Study tools" },
+  { href: "/quiz-setup", label: "Quizzes" },
   { href: "/about", label: "How it works" },
-  { href: "/universities", label: "Universities" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/faq", label: "FAQ" },
+  { href: "/faq", label: "Help" },
 ]
 
 export default function SiteHeader() {

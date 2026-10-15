@@ -9,7 +9,7 @@ export default function ThemeToggle() {
 
   React.useEffect(() => {
     const stored = localStorage.getItem("theme")
-    const dark = stored ? stored === "dark" : true
+    const dark = stored ? stored === "dark" : false
     document.documentElement.classList.toggle("dark", dark)
     document.documentElement.classList.toggle("light", !dark)
     setIsDark(dark)

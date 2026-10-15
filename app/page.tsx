@@ -1,84 +1,91 @@
 import Link from "next/link"
-import { ArrowDownRight, ArrowRight, BookOpen, Brain, Check, FileText, Flame, Sparkles, Target, UploadCloud } from "lucide-react"
+import { ArrowRight, BookOpen, Brain, CheckCircle2, FileText, GraduationCap, Layers3, Lightbulb, ListChecks, Target, TrendingUp, Upload } from "lucide-react"
 import BrandLogo from "@/components/brand-logo"
 
 const steps = [
-  { no: "01", icon: UploadCloud, title: "Bring your course material", body: "Add the PDFs you already study from. Keep lecture notes, books, slides, and past papers with the right subject." },
-  { no: "02", icon: Brain, title: "Practice with context", body: "Build questions from your sources, focus on a topic, or revisit the ideas behind previous mistakes." },
-  { no: "03", icon: Target, title: "Know what comes next", body: "Use your practice history, review timing, and exam date to choose a more useful next session." },
+  { icon: Layers3, number: "01", title: "Choose a subject", body: "Create a space for a class you are taking and add an exam date if you have one." },
+  { icon: Upload, number: "02", title: "Add your course material", body: "Upload lecture notes, slides, books, or past papers as PDFs." },
+  { icon: Brain, number: "03", title: "Practice what you are learning", body: "Build quizzes from your material, focus on a topic, or revisit a question you missed." },
+  { icon: TrendingUp, number: "04", title: "Review your progress", body: "Use your quiz history and topic estimates to decide what to study next." },
 ]
 
-const features = [
-  { icon: FileText, title: "Your materials stay in the loop", body: "Material-based questions can point back to a source title and page, so you can check the course content behind an answer." },
-  { icon: Target, title: "Practice follows your weak spots", body: "Topic practice and mistake review use your saved quiz history to keep revision focused." },
-  { icon: Flame, title: "Progress you can understand", body: "See your recent work, practice estimates, and learning streak in one student workspace." },
+const studyTools = [
+  { icon: FileText, title: "Your course materials", body: "Keep notes, slides, books, and past papers organized with each subject." },
+  { icon: ListChecks, title: "Quizzes from your PDFs", body: "Practice with questions grounded in the materials you add. Check a source page when details are available." },
+  { icon: Target, title: "Focused topic practice", body: "Choose a topic, review weak areas, and revisit concepts behind missed answers." },
+  { icon: TrendingUp, title: "Progress you can follow", body: "See completed quizzes, recent study sessions, and practice estimates in one place." },
+]
+
+const faqs = [
+  ["What is Tayyar?", "Tayyar is a study workspace for university students. Add your own course materials, practice with quizzes, review mistakes, and use your activity to plan what to study next."],
+  ["How do I get started?", "Create an account, add a subject, upload a course PDF, then choose a quiz or topic practice from your student dashboard."],
+  ["What can I upload?", "You can add PDF lecture notes, books, slides, and past papers to a subject."],
+  ["Do progress estimates predict my exam result?", "No. Practice mastery and readiness are estimates based on saved quiz activity. They are for guiding revision, not predicting exam marks."],
 ]
 
 export default function HomePage() {
   return (
-    <main className="tayyar-marketing-page">
-      <section className="tayyar-landing-hero">
-        <div className="tayyar-hero-orbit tayyar-hero-orbit-one" />
-        <div className="tayyar-hero-orbit tayyar-hero-orbit-two" />
-        <div className="tayyar-hero-topline"><span className="tayyar-live-indicator" />YOUR COURSE. YOUR NEXT MOVE.<span className="tayyar-topline-year">Tayyar · 2026</span></div>
-        <h1>Study that actually<br /><span>moves you forward.</span></h1>
-        <div className="tayyar-hero-bottom">
-          <div className="tayyar-hero-copy">
-            <p>Tayyar turns your course PDFs and quiz history into a clearer plan—so you know what you’ve practiced, what needs work, and what to study next.</p>
-            <div className="tayyar-hero-buttons"><Link href="/signup" className="tayyar-button-light">Build your study space <ArrowRight /></Link><Link href="/about" className="tayyar-button-outline">See how it works</Link></div>
-            <div className="tayyar-hero-trust">PDF-BASED PRACTICE <i /> TOPIC PROGRESS <i /> NO MADE-UP SCORES</div>
+    <main className="tayyar-marketing-page tayyar-learning-home">
+      <section className="tayyar-landing-hero" aria-labelledby="home-title">
+        <div className="tayyar-learning-hero-copy">
+          <p className="tayyar-learning-kicker"><GraduationCap aria-hidden="true" /> A STUDY SPACE BUILT AROUND YOUR COURSEWORK</p>
+          <h1 id="home-title">Learn with your<br /><span>course material.</span></h1>
+          <p className="tayyar-learning-lede">Organize your subjects, turn your PDFs into practice, and see what to review next. Tayyar helps you study with the material you already use in class.</p>
+          <div className="tayyar-hero-buttons">
+            <Link href="/signup" className="tayyar-button-light">Start learning <ArrowRight aria-hidden="true" /></Link>
+            <Link href="#how-it-works" className="tayyar-button-outline">See how it works</Link>
           </div>
-          <div className="tayyar-hero-visual" aria-label="Illustration of a focused study plan">
-            <svg className="tayyar-route-line" viewBox="0 0 560 310" fill="none" aria-hidden="true"><path d="M2 286C74 286 77 153 169 153c69 0 63 89 134 89 66 0 63-110 129-110 54 0 43-68 100-68" stroke="currentColor" strokeWidth="2" strokeDasharray="3 10"/><path d="m511 48 21 12-4-24" stroke="currentColor" strokeWidth="2"/></svg>
-            <div className="tayyar-visual-orb"><BookOpen /></div>
-            <div className="tayyar-focus-card">
-              <div className="tayyar-focus-card-head"><span className="tayyar-mini-label">A MORE PERSONAL STUDY LOOP</span><Sparkles /><span className="tayyar-focus-badge">YOUR MATERIAL</span></div>
-              <div className="tayyar-focus-card-title"><span>Today’s focus</span><strong>Practice with a purpose</strong></div>
-              <div className="tayyar-focus-row"><span className="tayyar-focus-number">01</span><span><strong>Review a weak topic</strong><small>Build a new set from your course material</small></span><ArrowDownRight /></div>
-              <div className="tayyar-focus-row"><span className="tayyar-focus-number">02</span><span><strong>Revisit a past mistake</strong><small>Test the concept with a fresh question</small></span><ArrowDownRight /></div>
-              <div className="tayyar-focus-card-foot"><span className="tayyar-live-indicator" />PERSONALIZED FROM YOUR PRACTICE HISTORY</div>
-            </div>
+          <div className="tayyar-learning-trust"><span><CheckCircle2 /> Your own course materials</span><span><CheckCircle2 /> Practice at your pace</span><span><CheckCircle2 /> Progress in one place</span></div>
+        </div>
+        <div className="tayyar-learning-preview" aria-label="Example student study workspace">
+          <div className="tayyar-preview-heading">
+            <div className="tayyar-preview-top"><span className="tayyar-preview-mark"><BookOpen /></span><span><strong>How studying works</strong><small>From your class to confident practice</small></span></div>
+            <span className="tayyar-preview-pill">4 SIMPLE STEPS</span>
           </div>
+          <div className="tayyar-preview-path">
+            {[
+              { icon: Lightbulb, title: "Choose a subject", body: "Create a space for one of your classes." },
+              { icon: FileText, title: "Add class materials", body: "Upload your notes, slides, or past papers." },
+              { icon: ListChecks, title: "Practice what you learned", body: "Make a quiz from your own materials." },
+              { icon: TrendingUp, title: "Review your progress", body: "See answers and what to study next." },
+            ].map(({ icon: Icon, title, body }, index) => <article className={`tayyar-path-step tone-${index + 1} ${index === 0 ? "is-current" : ""}`} key={title}>
+              <div className="tayyar-path-step-top"><span className="tayyar-path-step-tag">STEP {String(index + 1).padStart(2, "0")}</span><span className="tayyar-path-track" aria-hidden="true"><i style={{ width: `${(index + 1) * 25}%` }} /></span><span className="tayyar-path-arrow"><ArrowRight aria-hidden="true" /></span></div>
+              <span className="tayyar-path-icon"><Icon aria-hidden="true" /></span>
+              <h3>{title}</h3><p>{body}</p>
+            </article>)}
+          </div>
+          <div className="tayyar-preview-action"><Link href="/dashboard" className="tayyar-preview-link">Open My Learning <ArrowRight /></Link></div>
         </div>
       </section>
 
-      <section className="tayyar-proof-panel" aria-label="Tayyar study tools">
-        <p className="tayyar-mini-label">WHAT YOUR STUDY SPACE BRINGS TOGETHER</p>
-        <div className="tayyar-proof-grid"><div><strong>PDFs</strong><span>your course material</span></div><div><strong>5 modes</strong><span>focused practice</span></div><div><strong>Page links</strong><span>source-grounded questions</span></div><div><strong>Next step</strong><span>based on your progress</span></div></div>
+      <section className="tayyar-learning-intro" aria-label="What Tayyar offers">
+        <div><BookOpen /><strong>Organize</strong><span>Subjects and course PDFs</span><ArrowRight aria-hidden="true" /></div><div><Brain /><strong>Practice</strong><span>Quizzes and focused topics</span><ArrowRight aria-hidden="true" /></div><div><TrendingUp /><strong>Improve</strong><span>Review mistakes and progress</span></div>
       </section>
 
-      <div className="tayyar-topic-marquee" aria-hidden="true">
-        <div className="tayyar-topic-marquee-track is-outline is-right"><span>Data science <b>✳</b> Software engineering <b>✳</b> Business <b>✳</b> Health sciences <b>✳</b> Humanities <b>✳</b> Mathematics <b>✳</b> Computing <b>✳</b></span><span>Data science <b>✳</b> Software engineering <b>✳</b> Business <b>✳</b> Health sciences <b>✳</b> Humanities <b>✳</b> Mathematics <b>✳</b> Computing <b>✳</b></span></div>
-        <div className="tayyar-topic-marquee-track is-filled is-left"><span>Classification <b>✳</b> Regression <b>✳</b> Data cleaning <b>✳</b> Algorithms <b>✳</b> Research <b>✳</b> Accounting <b>✳</b> Biology <b>✳</b></span><span>Classification <b>✳</b> Regression <b>✳</b> Data cleaning <b>✳</b> Algorithms <b>✳</b> Research <b>✳</b> Accounting <b>✳</b> Biology <b>✳</b></span></div>
-      </div>
-
-      <section id="how-it-works" className="tayyar-steps-section">
-        <div className="tayyar-section-intro"><div><p className="tayyar-mini-label">HOW YOU’LL USE IT</p><h2>Plan it. Practice it.<br /><span>Or just ask.</span></h2></div><p>A study space built around your university, your course material, your weak topics, and the questions you want help with.</p></div>
-        <div className="tayyar-step-cards">{steps.map(({ no, icon: Icon, title, body }, i) => <article key={no} className={`tayyar-step-card step-${i + 1}`}><div className="tayyar-step-card-top"><span className="tayyar-icon-square"><Icon /></span><strong>{no}</strong></div><h3>{title}</h3><p>{body}</p><div className="tayyar-step-card-foot"><span /><small>{i === 0 ? "YOUR PDFs" : i === 1 ? "YOUR ANSWERS" : "YOUR NEXT SESSION"}</small></div>{i < 2 && <span className="tayyar-step-connector">↘</span>}</article>)}</div>
+      <section id="how-it-works" className="tayyar-steps-section tayyar-learning-section">
+        <div className="tayyar-learning-section-heading"><p className="tayyar-learning-eyebrow">YOUR FIRST STUDY SESSION</p><h2>Four clear steps<br /><span>from class to practice.</span></h2><p>You bring the subject and study materials. Tayyar helps you turn them into a focused learning routine.</p></div>
+        <div className="tayyar-learning-steps">{steps.map(({ icon: Icon, number, title, body }) => <article className="tayyar-learning-step" key={number}><div className="tayyar-learning-step-top"><span><Icon /></span><small>STEP {number}</small></div><h3>{title}</h3><p>{body}</p></article>)}</div>
       </section>
 
-      <section className="tayyar-features-section"><div className="tayyar-section-intro"><div><p className="tayyar-mini-label">BUILT AROUND YOUR LEARNING</p><h2>Know what you know.<br /><span>Practice what you don’t.</span></h2></div><Link className="tayyar-text-link" href="/about">Explore the study tools <ArrowRight /></Link></div>
-        <div className="tayyar-feature-grid">{features.map(({ icon: Icon, title, body }, i) => <article key={title} className="tayyar-feature-card"><div className="tayyar-feature-card-top"><span className="tayyar-icon-square"><Icon /></span><span>0{i + 1}</span></div><h3>{title}</h3><p>{body}</p><Check className="tayyar-feature-check" /></article>)}</div>
+      <section id="study-tools" className="tayyar-learning-tools">
+        <div className="tayyar-learning-section-heading"><p className="tayyar-learning-eyebrow">MADE FOR THE WAY STUDENTS STUDY</p><h2>Everything starts<br /><span>with your coursework.</span></h2><p>No sample catalog to figure out. Start with your own subjects and the materials you use for class.</p></div>
+        <div className="tayyar-learning-tool-grid">{studyTools.map(({ icon: Icon, title, body }, index) => <article className="tayyar-learning-tool" key={title}><span className={`tayyar-learning-tool-icon tone-${index + 1}`}><Icon /></span><h3>{title}</h3><p>{body}</p></article>)}</div>
+        <Link href="/study-modes" className="tayyar-text-link">Explore study tools <ArrowRight /></Link>
       </section>
 
-      <section className="tayyar-home-universities"><div><p className="tayyar-mini-label">MADE FOR EVERY CAMPUS</p><h2>Your university.<br /><span>Your next move.</span></h2><p>Find official program and admissions links for universities in Pakistan. Always confirm current dates and eligibility with the institution.</p><Link href="/universities" className="tayyar-button-outline">Explore universities <ArrowRight /></Link></div><div className="tayyar-home-university-list">{["Minhaj University Lahore", "Superior University", "University of Central Punjab", "University of the Punjab", "LUMS", "UMT"].map((name, i) => <Link key={name} href="/universities" className="tayyar-home-university-item"><span>0{i + 1}</span><strong>{name}</strong><ArrowRight /></Link>)}</div></section>
-
-      <section id="pricing" className="tayyar-home-pricing">
-        <div className="tayyar-home-pricing-copy"><p className="tayyar-mini-label">THREE MONTHLY STUDY PLANS</p><h2>Choose your<br /><span>study pace.</span></h2><p>Pick Starter, Plus, or Exam Prep according to the practice tools you need. All prices are shown in Pakistani rupees.</p><Link href="/pricing" className="tayyar-text-link">Compare all three plans <ArrowRight /></Link></div>
-        <article className="tayyar-home-pricing-card"><div className="tayyar-home-pricing-card-head"><span className="tayyar-icon-square"><BookOpen /></span><span className="tayyar-current-badge"><i /> STARTER PLAN</span></div><p className="tayyar-home-pricing-label">MONTHLY · PAKISTAN</p><h3>Start with your course.</h3><p>Organize course PDFs and build a steady routine with material and topic practice.</p><div className="tayyar-home-plan-price"><strong>Rs 1,000</strong><span>PKR / month</span></div><ul><li><Check /> PDF study material library</li><li><Check /> Material and topic quizzes</li><li><Check /> Practice progress overview</li></ul><Link href="/pricing" className="tayyar-button-light">View monthly plans <ArrowRight /></Link><small>Prices are listed for reference; online checkout and plan access controls are not connected yet.</small></article>
+      <section className="tayyar-learning-benefits">
+        <div className="tayyar-learning-benefits-copy"><p className="tayyar-learning-eyebrow">A STUDY ROUTINE THAT MAKES SENSE</p><h2>Know what you studied.<br /><span>Choose what comes next.</span></h2><p>Add a class, keep its materials together, then practice and review at a time that works for you. Your dashboard makes your next step easy to find.</p><Link href="/dashboard" className="tayyar-button-light">Go to My Learning <ArrowRight /></Link></div>
+        <div className="tayyar-learning-benefit-list"><div><span><CheckCircle2 /></span><p><strong>Learn on your schedule</strong><small>Study with your own materials whenever you are ready.</small></p></div><div><span><CheckCircle2 /></span><p><strong>Keep each subject organized</strong><small>Bring notes, slides, and past papers into one study space.</small></p></div><div><span><CheckCircle2 /></span><p><strong>Learn from your answers</strong><small>Review explanations and revisit the topics you missed.</small></p></div><div><span><CheckCircle2 /></span><p><strong>Follow your practice</strong><small>See your quiz history and estimates as you keep learning.</small></p></div></div>
       </section>
 
-      <section id="faq" className="tayyar-home-faq">
-        <div className="tayyar-home-faq-intro"><p className="tayyar-mini-label">BEFORE YOU BEGIN</p><h2>Quick<br /><span>answers.</span></h2><p>Get the essentials about materials, practice, and your readiness estimate.</p><Link href="/faq" className="tayyar-text-link">Visit all FAQs <ArrowRight /></Link></div>
-        <div className="tayyar-home-faq-list">
-          <details><summary>Which study materials can I add?</summary><p>You can upload PDF lecture notes, books, slides, and past papers, then organize them by subject.</p></details>
-          <details><summary>Are questions based on my own material?</summary><p>Material quizzes use relevant extracted passages. When source details are available, you can check the document and page.</p></details>
-          <details><summary>What does Practice Mastery tell me?</summary><p>It is an estimate based on your saved quiz performance to help guide revision—not a precise knowledge score or exam-mark prediction.</p></details>
-        </div>
+      <section id="faq" className="tayyar-home-faq tayyar-learning-faq">
+        <div className="tayyar-home-faq-intro"><p className="tayyar-learning-eyebrow">GOOD TO KNOW</p><h2>New here?<br /><span>Start with the basics.</span></h2><p>Understand how Tayyar fits into the way you already study.</p><Link href="/faq" className="tayyar-text-link">Read all FAQs <ArrowRight /></Link></div>
+        <div className="tayyar-home-faq-list">{faqs.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div>
       </section>
 
-      <section className="tayyar-final-cta"><div><p className="tayyar-mini-label">START WITH ONE SUBJECT</p><h2>Make your next revision<br /><span>session count.</span></h2><p>Bring a course PDF. Tayyar will help you choose a focused next step.</p></div><Link href="/signup" className="tayyar-button-light">Get started <ArrowRight /></Link></section>
-      <footer className="tayyar-footer"><div className="tayyar-footer-main"><div><Link href="/" className="tayyar-brand" aria-label="Tayyar home"><BrandLogo className="h-16 w-48 object-contain" /></Link><p>Study from your own materials.<br />Know what to practice next.</p><span className="tayyar-footer-tag"><Check /> Built around your coursework</span></div><div><p className="tayyar-mini-label">PRODUCT</p><Link href="/about">How it works</Link><Link href="/pricing">Pricing</Link><Link href="/faq">FAQ</Link></div><div><p className="tayyar-mini-label">YOUR SPACE</p><Link href="/signup">Create account</Link><Link href="/login">Sign in</Link><Link href="/dashboard">Dashboard</Link></div></div><div className="tayyar-footer-bottom"><span>© 2026 Tayyar · AI Exam Preparation</span><span>Practice mastery is an estimate, not a predicted exam mark.</span></div></footer>
+      <section className="tayyar-final-cta tayyar-learning-final"><div><p className="tayyar-learning-eyebrow">YOUR NEXT STEP STARTS HERE</p><h2>Pick a subject.<br /><span>Start learning.</span></h2><p>Create your student space and begin with a course you are already taking.</p></div><Link href="/signup" className="tayyar-button-light">Create your account <ArrowRight /></Link></section>
+
+      <footer className="tayyar-footer tayyar-learning-footer"><div className="tayyar-footer-main"><div><Link href="/" className="tayyar-brand" aria-label="Tayyar home"><BrandLogo className="h-16 w-48 object-contain" /></Link><p>Your subjects, materials, and practice<br />together in one student learning space.</p><span className="tayyar-footer-tag"><GraduationCap /> Built around your coursework</span></div><div><p className="tayyar-learning-eyebrow">LEARN</p><Link href="/dashboard/subjects">My subjects</Link><Link href="/study-modes">Study tools</Link><Link href="/quiz-setup">Quizzes</Link><Link href="/universities">Universities</Link></div><div><p className="tayyar-learning-eyebrow">TAYYAR</p><Link href="/about">About</Link><Link href="/faq">FAQ &amp; support</Link><Link href="/pricing">Pricing</Link><Link href="/login">Log in</Link><Link href="/signup">Sign up</Link></div></div><div className="tayyar-footer-bottom"><span>© 2026 Tayyar · A study space for university students</span><span>Practice readiness is an estimate, not an exam mark prediction.</span></div></footer>
     </main>
   )
 }
